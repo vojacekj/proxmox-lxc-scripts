@@ -630,6 +630,48 @@ lookup_service() {
   return 1
 }
 
+# Fetch port from community-scripts GitHub repo on demand
+# Usage: fetch_port_from_community_scripts "jellyfin"
+# Returns: "selfhst_ref:port" or empty string
+fetch_port_from_community_scripts() {
+  local service_name="$1"
+  local cache_file="/tmp/.flame-cs-cache-${service_name}"
+
+  # Check cache (valid for 7 days)
+  if [[ -f "$cache_file" ]]; then
+    local cache_age=$(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0) ))
+    if [[ $cache_age -lt 604800 ]]; then
+      cat "$cache_file"
+      return 0
+    fi
+  fi
+
+  # Try to fetch the script from GitHub
+  local script_url="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/${service_name}.sh"
+  local script_content
+  script_content=$(curl --proto '=https' --tlsv1.2 -sf --connect-timeout 5 --max-time 10 "$script_url" 2>/dev/null)
+
+  if [[ -z "$script_content" ]]; then
+    return 1
+  fi
+
+  # Extract port from output messages like: http://${IP}:8096 or https://${IP}:9443
+  local port=""
+  port=$(echo "$script_content" | grep -oP 'http://\$\{IP\}:\K[0-9]+' | head -1)
+  if [[ -z "$port" ]]; then
+    port=$(echo "$script_content" | grep -oP 'https://\$\{IP\}:\K[0-9]+' | head -1)
+  fi
+
+  if [[ -n "$port" ]]; then
+    # Cache the result (selfhst_ref:port format)
+    echo "${service_name}:${port}" > "$cache_file"
+    echo "${service_name}:${port}"
+    return 0
+  fi
+
+  return 1
+}
+
 get_icon_url() {
   local hostname_lower
   hostname_lower=$(echo "$1" | tr '[:upper:]' '[:lower:]')
@@ -870,9 +912,19 @@ main() {
       fi
     fi
 
+    # Try community-scripts GitHub (on demand, cached 7 days)
+    if [[ -z "$port" ]]; then
+      log INFO "  Not in built-in map, checking community-scripts..."
+      local cs_info
+      if cs_info=$(fetch_port_from_community_scripts "$name_lower" 2>/dev/null); then
+        port="${cs_info##*:}"
+        log INFO "  Found in community-scripts: port ${port}"
+      fi
+    fi
+
     # Scan ports if still unknown
     if [[ -z "$port" ]]; then
-      log INFO "  Service not in map, scanning common ports..."
+      log INFO "  Scanning common ports..."
       port=$(scan_web_port "$ip" "$SCAN_PORTS" 2>/dev/null)
     fi
 
