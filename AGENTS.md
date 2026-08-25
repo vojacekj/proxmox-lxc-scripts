@@ -54,7 +54,11 @@ FLAME_LXC_ID="108"
 SCAN_PORTS="80,443,8080,..."
 PORT_OVERRIDES="myapp:8080 custom:3000"
 ICON_OVERRIDES="myapp:https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/docker.svg"
+SKIP_APPS="pve,monitoring"
 ```
+
+- `SKIP_APPS`: Comma-separated container names to exclude from auto-discovery
+- All LXCs are now processed by default (including Flame itself)
 
 ### Notification Format
 
@@ -96,3 +100,4 @@ Failed: 0
 - Commit messages: imperative mood, lowercase, no period
 - Config files (`*.conf`) are gitignored, only `*.conf.example` committed
 - Run `bash -n` syntax check before committing shell scripts
+- **Always update README.md and AGENTS.md** when making changes to script behavior, config options, or functions
