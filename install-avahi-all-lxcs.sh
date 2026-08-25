@@ -158,6 +158,7 @@ fi
 installed=0
 skipped_already=0
 skipped_stopped=0
+skipped_no_apt=0
 failed=0
 
 for line in "${lxc_lines[@]}"; do
@@ -182,6 +183,14 @@ for line in "${lxc_lines[@]}"; do
   fi
 
   log INFO "ℹ️ Checking LXC $CTID ($CTNAME)..."
+
+  # Check if apt-get is available in this container
+  if ! timeout 30 pct exec "$CTID" -- bash -c 'command -v apt-get' &>/dev/null; then
+    log INFO "⏭️ ID $CTID ($CTNAME): No apt-get found"
+    REPORT+="• ID $CTID ($CTNAME): ⏭️ No apt-get found"$'\n'
+    ((skipped_no_apt++)) || true
+    continue
+  fi
 
   # Check if avahi-daemon is installed (timeout prevents hung processes)
   if timeout 30 pct exec "$CTID" -- dpkg -l avahi-daemon &>/dev/null; then
@@ -209,6 +218,7 @@ REPORT+=$'\n'"*📊 Summary:*"$'\n'
 REPORT+="• Installed: \`${installed}\`"$'\n'
 REPORT+="• Already present: \`${skipped_already}\`"$'\n'
 REPORT+="• Skipped (stopped): \`${skipped_stopped}\`"$'\n'
+REPORT+="• Skipped (no apt): \`${skipped_no_apt}\`"$'\n'
 REPORT+="• Failed: \`${failed}\`"
 
 log INFO "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -216,6 +226,7 @@ log INFO "📊 Summary"
 log INFO "   Installed:         $installed"
 log INFO "   Already present:   $skipped_already"
 log INFO "   Skipped (stopped): $skipped_stopped"
+log INFO "   Skipped (no apt):  $skipped_no_apt"
 log INFO "   Failed:            $failed"
 log INFO "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
