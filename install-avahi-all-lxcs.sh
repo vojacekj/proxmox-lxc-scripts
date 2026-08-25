@@ -237,7 +237,11 @@ log INFO "   Skipped (no apt):  $skipped_no_apt"
 log INFO "   Failed:            $failed"
 log INFO "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-log INFO "ℹ️ Sending report..."
-send_notification "$REPORT"
+if (( installed > 0 || failed > 0 )); then
+  log INFO "ℹ️ Sending notification..."
+  send_notification "$REPORT"
+else
+  log INFO "ℹ️ Nothing installed or failed — skipping notification."
+fi
 
 log INFO "✅ Done."
