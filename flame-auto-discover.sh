@@ -408,7 +408,7 @@ ensure_sqlite3_in_lxc() {
   local vmid="$1"
 
   # Check if sqlite3 is already available
-  if pct exec "$vmid" -- command -v sqlite3 &>/dev/null; then
+  if pct exec "$vmid" -- sh -c "command -v sqlite3 || which sqlite3 || test -x /usr/bin/sqlite3" &>/dev/null; then
     return 0
   fi
 
