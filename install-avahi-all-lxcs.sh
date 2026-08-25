@@ -1,164 +1,225 @@
 #!/bin/bash
-set -euo pipefail
+#
+# Proxmox LXC Avahi-daemon Installer
+#
+# Checks all LXC containers for avahi-daemon and installs it if missing.
+# Sends a summary notification via Telegram and/or Gotify.
+#
+# Use this script at your own risk.
 
+SCRIPT_VERSION="v1.0.0"
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# --- LOGGING ---
+LOG_STDOUT="${LOG_STDOUT:-yes}"
+
+log() {
+  local level="${1:-INFO}"
+  shift
+  local timestamp
+  printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1
+  local message="${timestamp} [${level}] $*"
+
+  if [[ "${LOG_STDOUT}" == "yes" ]]; then
+    echo "${message}" >&2
+  fi
+
+  if command -v logger &>/dev/null; then
+    logger -t "avahi-installer" -p "user.${level,,}" -- "$*" 2>/dev/null || true
+  fi
+}
+
+# --- CONFIGURATION ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION="v1.0.0"
+HOSTNAME=$(hostname -f 2>/dev/null || hostname)
 
-# ─── Colors ────────────────────────────────────────────────────────────────────
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'
-BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
-
-log()    { echo -e "${BLUE}[$(date '+%H:%M:%S')]${NC} $*"; }
-ok()     { echo -e "${GREEN}[$(date '+%H:%M:%S')] ✔${NC} $*"; }
-warn()   { echo -e "${YELLOW}[$(date '+%H:%M:%S')] ⚠${NC} $*"; }
-err()    { echo -e "${RED}[$(date '+%H:%M:%S')] ✖${NC} $*" >&2; }
-
-# ─── Config loading ────────────────────────────────────────────────────────────
 secure_source() {
-    local file="$1"
-    if [[ -f "$file" ]]; then
-        local perms
-        perms=$(stat -c '%a' "$file" 2>/dev/null || stat -f '%Lp' "$file" 2>/dev/null)
-        if [[ "$perms" != "600" && "$perms" != "640" ]]; then
-            warn "Insecure permissions ($perms) on $file — expected 600. Skipping."
-            return 1
-        fi
-        # shellcheck source=/dev/null
-        source "$file"
-    fi
+  local conf_file="$1"
+  if [[ ! -f "$conf_file" ]]; then return 0; fi
+  if [[ -h "$conf_file" ]]; then
+    log ERROR "❌ SECURITY CRITICAL: $conf_file is a symlink. Refusing to load."
+    return 1
+  fi
+
+  local stat_out perms owner
+  stat_out=$(stat -c "%a %U" "$conf_file" 2>/dev/null || echo "777 root")
+  perms="${stat_out%% *}"
+  owner="${stat_out#* }"
+
+  if [[ "$perms" != "600" ]] || [[ "$owner" != "root" ]]; then
+    log ERROR "❌ SECURITY CRITICAL: Config file $conf_file has insecure permissions/ownership ($perms $owner). Refusing to load."
+    return 1
+  fi
+  source "$conf_file"
 }
 
-load_configs() {
-    # Telegram
-    unset TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID 2>/dev/null
-    if [[ -f "${SCRIPT_DIR}/telegram.conf" ]]; then
-        secure_source "${SCRIPT_DIR}/telegram.conf"
-    elif [[ -f "/etc/pve-telegram.conf" ]]; then
-        secure_source "/etc/pve-telegram.conf"
-    fi
+# Load Telegram config
+TOKEN=""
+CHAT_ID=""
+if [[ -f "${SCRIPT_DIR}/telegram.conf" ]]; then
+  secure_source "${SCRIPT_DIR}/telegram.conf"
+elif [[ -f "/etc/pve-telegram.conf" ]]; then
+  secure_source "/etc/pve-telegram.conf"
+fi
+TOKEN="${TOKEN:-}"
+CHAT_ID="${CHAT_ID:-}"
 
-    # Gotify
-    unset GOTIFY_SERVER GOTIFY_TOKEN 2>/dev/null
-    if [[ -f "${SCRIPT_DIR}/gotify.conf" ]]; then
-        secure_source "${SCRIPT_DIR}/gotify.conf"
-    elif [[ -f "/etc/pve-gotify.conf" ]]; then
-        secure_source "/etc/pve-gotify.conf"
-    fi
-}
+# Load Gotify config
+GOTIFY_SERVER=""
+GOTIFY_TOKEN=""
+if [[ -f "${SCRIPT_DIR}/gotify.conf" ]]; then
+  secure_source "${SCRIPT_DIR}/gotify.conf"
+elif [[ -f "/etc/pve-gotify.conf" ]]; then
+  secure_source "/etc/pve-gotify.conf"
+fi
+GOTIFY_SERVER="${GOTIFY_SERVER:-}"
+GOTIFY_TOKEN="${GOTIFY_TOKEN:-}"
 
-# ─── Notification functions ────────────────────────────────────────────────────
+# --- NOTIFICATION FUNCTIONS ---
 send_telegram() {
-    local message="$1"
-    [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]] && return 0
+  local message="$1"
+  [[ -z "${TOKEN}" || -z "${CHAT_ID}" ]] && { log INFO "⏭️ Telegram config missing, skipping notification."; return 0; }
 
-    curl -s --connect-timeout 10 --max-time 30 \
-        -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-        -d chat_id="${TELEGRAM_CHAT_ID}" \
-        -d parse_mode="Markdown" \
-        -d text="${message}" \
-        >/dev/null 2>&1 || warn "Telegram notification failed"
+  local URL="https://api.telegram.org/bot${TOKEN}/sendMessage"
+
+  local RESPONSE
+  RESPONSE=$(curl --proto '=https' --tlsv1.2 -s --connect-timeout 10 --max-time 30 -X POST -K <(cat <<CURL_CONF
+url = "$URL"
+data-urlencode = "chat_id=$CHAT_ID"
+data-urlencode = "parse_mode=Markdown"
+CURL_CONF
+) --data-urlencode "text@-" <<< "$message")
+
+  if [[ $RESPONSE != *'"ok":true'* ]]; then
+    log ERROR "❌ Telegram Error: $RESPONSE"
+  else
+    log INFO "✅ Telegram delivery successful."
+  fi
 }
 
 send_gotify() {
-    local message="$1"
-    [[ -z "${GOTIFY_SERVER:-}" || -z "${GOTIFY_TOKEN:-}" ]] && return 0
+  local message="$1"
+  [[ -z "${GOTIFY_SERVER}" || -z "${GOTIFY_TOKEN}" ]] && { log INFO "⏭️ Gotify config missing, skipping notification."; return 0; }
 
-    local url="${GOTIFY_SERVER}/message?token=${GOTIFY_TOKEN}"
-    local curl_flags=(-s --connect-timeout 10 --max-time 30)
+  local url="${GOTIFY_SERVER}/message?token=${GOTIFY_TOKEN}"
+  local curl_flags=(-s --connect-timeout 10 --max-time 30)
 
-    if [[ "$GOTIFY_SERVER" == https://* ]]; then
-        curl_flags+=(--proto '=https' --tlsv1.2)
-    fi
+  if [[ "$GOTIFY_SERVER" == https://* ]]; then
+    curl_flags+=(--proto '=https' --tlsv1.2)
+  fi
 
-    curl "${curl_flags[@]}" \
-        -X POST "$url" \
-        -H "Content-Type: application/json" \
-        -d "{\"title\": \"Proxmox LXC\", \"message\": \"${message}\", \"priority\": 5}" \
-        >/dev/null 2>&1 || warn "Gotify notification failed"
+  local plain_message
+  plain_message=$(echo "$message" | sed 's/\*//g')
+
+  local RESPONSE
+  RESPONSE=$(curl "${curl_flags[@]}" \
+    -X POST "$url" \
+    -H "Content-Type: application/json" \
+    -d "{\"title\": \"Proxmox Avahi Installer\", \"message\": \"${plain_message}\", \"priority\": 5}")
+
+  if [[ $RESPONSE != *"id"* ]]; then
+    log ERROR "❌ Gotify Error: $RESPONSE"
+  else
+    log INFO "✅ Gotify delivery successful."
+  fi
 }
 
 send_notification() {
-    local message="$1"
-    send_telegram "$message"
-    local plain_message
-    plain_message=$(echo "$message" | sed 's/\*//g')
-    send_gotify "$plain_message"
+  local message="$1"
+  send_telegram "$message"
+  send_gotify "$message"
 }
 
-# ─── Main ──────────────────────────────────────────────────────────────────────
-main() {
-    load_configs
+# --- PRE-FLIGHT ---
+if [[ $EUID -ne 0 ]]; then
+  log ERROR "❌ Error: This script must be run as root."
+  exit 1
+fi
 
-    echo -e "${CYAN}=========================================="
-    echo " Avahi-daemon Installer for Proxmox LXCs"
-    echo " ${VERSION}"
-    echo -e "==========================================${NC}"
-    echo ""
+if ! command -v pct &>/dev/null; then
+  log ERROR "❌ pct command not found — must run on a Proxmox host."
+  exit 1
+fi
 
-    if ! command -v pct &>/dev/null; then
-        err "pct command not found — must run on a Proxmox host."
-        exit 1
-    fi
+# --- MAIN ---
+log INFO "ℹ️ Starting avahi-daemon check on $HOSTNAME..."
 
-    mapfile -t lxc_ids < <(pct list | awk 'NR>1 {print $1}')
+REPORT="*📦 Avahi-daemon Installer: $HOSTNAME*"$'\n\n'
 
-    if [[ ${#lxc_ids[@]} -eq 0 ]]; then
-        warn "No LXC containers found."
-        send_notification "⚠️ *Avahi Installer*\nNo LXC containers found on \$(hostname)."
-        exit 0
-    fi
+# Get all LXCs with name and status
+mapfile -t lxc_lines < <(pct list | awk 'NR>1 {print $1 ":" $2 ":" $NF}')
 
-    local installed=0 skipped_already=0 skipped_stopped=0 failed=0
+if [[ ${#lxc_lines[@]} -eq 0 ]]; then
+  log WARN "⚠️ No LXC containers found."
+  send_notification "⚠️ *Avahi Installer*\nNo LXC containers found on \`${HOSTNAME}\`."
+  exit 0
+fi
 
-    for ctid in "${lxc_ids[@]}"; do
-        local name
-        name=$(pct config "$ctid" 2>/dev/null | grep '^hostname:' | awk '{print $2}')
-        local status
-        status=$(pct status "$ctid" | awk '{print $2}')
+installed=0
+skipped_already=0
+skipped_stopped=0
+failed=0
 
-        if [[ "$status" != "running" ]]; then
-            printf "[%s] %-20s SKIP (stopped)\n" "$ctid" "$name"
-            ((skipped_stopped++))
-            continue
-        fi
+for line in "${lxc_lines[@]}"; do
+  [[ -z "$line" ]] && continue
+  CTID="${line%%:*}"
+  rest="${line#*:}"
+  STATUS="${rest%%:*}"
+  CTNAME="${rest##*:}"
 
-        if pct exec "$ctid" -- dpkg -l avahi-daemon &>/dev/null; then
-            printf "[%s] %-20s already installed\n" "$ctid" "$name"
-            ((skipped_already++))
-            continue
-        fi
+  # Escape Markdown for Telegram
+  CTNAME="${CTNAME//_/\\_}"
+  CTNAME="${CTNAME//\*/\\*}"
+  CTNAME="${CTNAME//\[/\\[}"
+  CTNAME="${CTNAME//\]/\\]}"
+  CTNAME="${CTNAME//\`/\\\`}"
 
-        printf "[%s] %-20s installing avahi-daemon..." "$ctid" "$name"
+  if [[ "$STATUS" != "running" ]]; then
+    log INFO "⏭️ ID $CTID ($CTNAME): Stopped — skipping"
+    REPORT+="• ID $CTID ($CTNAME): ⏭️ Stopped — skipped"$'\n'
+    ((skipped_stopped++)) || true
+    continue
+  fi
 
-        if pct exec "$ctid" -- bash -c "apt-get update -qq && apt-get install -y -qq avahi-daemon" &>/dev/null; then
-            pct exec "$ctid" -- systemctl enable --now avahi-daemon &>/dev/null
-            printf " done\n"
-            ((installed++))
-        else
-            printf " FAILED\n"
-            ((failed++))
-        fi
-    done
+  log INFO "ℹ️ Checking LXC $CTID ($CTNAME)..."
 
-    echo ""
-    echo -e "${CYAN}=========================================="
-    echo " Summary"
-    echo -e "==========================================${NC}"
-    echo " Installed:         $installed"
-    echo " Already present:   $skipped_already"
-    echo " Skipped (stopped): $skipped_stopped"
-    echo " Failed:            $failed"
-    echo -e "${CYAN}==========================================${NC}"
+  # Check if avahi-daemon is installed (timeout prevents hung processes)
+  if timeout 30 pct exec "$CTID" -- dpkg -l avahi-daemon &>/dev/null; then
+    log INFO "✅ ID $CTID ($CTNAME): avahi-daemon already installed"
+    REPORT+="• ID $CTID ($CTNAME): ✅ Already installed"$'\n'
+    ((skipped_already++)) || true
+    continue
+  fi
 
-    local host
-    host=$(hostname 2>/dev/null || echo "unknown")
+  # Install avahi-daemon
+  log INFO "⏳ ID $CTID ($CTNAME): Installing avahi-daemon..."
+  if timeout 120 pct exec "$CTID" -- bash -c "apt-get update -qq && apt-get install -y -qq avahi-daemon" &>/dev/null; then
+    timeout 30 pct exec "$CTID" -- systemctl enable --now avahi-daemon &>/dev/null
+    log INFO "✅ ID $CTID ($CTNAME): avahi-daemon installed and started"
+    REPORT+="• ID $CTID ($CTNAME): ✅ Installed"$'\n'
+    ((installed++)) || true
+  else
+    log ERROR "❌ ID $CTID ($CTNAME): Failed to install avahi-daemon"
+    REPORT+="• ID $CTID ($CTNAME): ❌ Failed to install"$'\n'
+    ((failed++)) || true
+  fi
+done
 
-    send_notification "✅ *Avahi Installer Complete*
- Host: \`${host}\`
- Installed: \`${installed}\`
- Already present: \`${skipped_already}\`
- Skipped (stopped): \`${skipped_stopped}\`
- Failed: \`${failed}\`"
-}
+REPORT+=$'\n'"*📊 Summary:*"$'\n'
+REPORT+="• Installed: \`${installed}\`"$'\n'
+REPORT+="• Already present: \`${skipped_already}\`"$'\n'
+REPORT+="• Skipped (stopped): \`${skipped_stopped}\`"$'\n'
+REPORT+="• Failed: \`${failed}\`"
 
-main "$@"
+log INFO "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+log INFO "📊 Summary"
+log INFO "   Installed:         $installed"
+log INFO "   Already present:   $skipped_already"
+log INFO "   Skipped (stopped): $skipped_stopped"
+log INFO "   Failed:            $failed"
+log INFO "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+log INFO "ℹ️ Sending report..."
+send_notification "$REPORT"
+
+log INFO "✅ Done."
