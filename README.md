@@ -2,23 +2,26 @@
 
 Helper scripts for managing Proxmox VE LXC containers with **Telegram** and **Gotify** notifications.
 
-## Scripts
-
-| Script | Description |
-|--------|-------------|
-| `flame-auto-discover.sh` | Auto-detect running LXC services and add them to a Flame dashboard |
-| `install-avahi-all-lxcs.sh` | Check all running LXCs for `avahi-daemon` and install it if missing |
-| `netdata-postinstall.sh` | Configure Netdata on PVE host to monitor LXC containers via cgroups v2 |
-
 ## Table of Contents
 
 - [Installation](#installation)
 - [Notification Setup](#notification-setup)
-- [flame-auto-discover.sh](#flame-auto-discoversh)
-- [install-avahi-all-lxcs.sh](#install-avahi-all-lxcsh)
-- [netdata-postinstall.sh](#netdata-postinstallsh)
+  - [Telegram](#telegram)
+  - [Gotify](#gotify)
+- [Scripts](#scripts)
+  - [flame-auto-discover.sh](#flame-auto-discoversh)
+  - [install-avahi-all-lxcs.sh](#install-avahi-all-lxcsh)
+  - [netdata-postinstall.sh](#netdata-postinstallsh)
 - [Security](#security)
 - [License](#license)
+
+## Scripts
+
+| Script | Description |
+|--------|-------------|
+| [`flame-auto-discover.sh`](#flame-auto-discoversh) | Auto-detect running LXC services and add them to a Flame dashboard |
+| [`install-avahi-all-lxcs.sh`](#install-avahi-all-lxcsh) | Check all running LXCs for `avahi-daemon` and install it if missing |
+| [`netdata-postinstall.sh`](#netdata-postinstallsh) | Configure Netdata on PVE host to monitor LXC containers via cgroups v2 |
 
 ## Installation
 
