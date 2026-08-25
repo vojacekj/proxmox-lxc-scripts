@@ -104,12 +104,19 @@ send_gotify() {
   local url="${GOTIFY_SERVER}/message?token=${GOTIFY_TOKEN}"
   local curl_flags=(-s --connect-timeout 10 --max-time 30)
 
+  # Enforce HTTPS when the server URL uses https://; allow plain HTTP otherwise (local LAN)
   if [[ "$GOTIFY_SERVER" == https://* ]]; then
     curl_flags+=(--proto '=https' --tlsv1.2)
   fi
 
+  # Strip Markdown formatting (Gotify is plain text only)
   local plain_message
   plain_message=$(echo "$message" | sed 's/\*//g')
+  # Escape JSON special characters
+  plain_message="${plain_message//\\/\\\\}"
+  plain_message="${plain_message//\"/\\\"}"
+  plain_message="${plain_message//$'\n'/\\n}"
+  plain_message="${plain_message//$'\t'/\\t}"
 
   local RESPONSE
   RESPONSE=$(curl "${curl_flags[@]}" \
