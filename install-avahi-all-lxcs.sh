@@ -222,11 +222,11 @@ for line in "${lxc_lines[@]}"; do
 done
 
 REPORT+=$'\n'"📊 Summary:"$'\n'
-REPORT+="• Installed: \`${installed}\`"$'\n'
-REPORT+="• Already present: \`${skipped_already}\`"$'\n'
-REPORT+="• Skipped (stopped): \`${skipped_stopped}\`"$'\n'
-REPORT+="• Skipped (no apt): \`${skipped_no_apt}\`"$'\n'
-REPORT+="• Failed: \`${failed}\`"
+REPORT+="• Installed: ${installed}"$'\n'
+REPORT+="• Already present: ${skipped_already}"$'\n'
+REPORT+="• Skipped (stopped): ${skipped_stopped}"$'\n'
+REPORT+="• Skipped (no apt): ${skipped_no_apt}"$'\n'
+REPORT+="• Failed: ${failed}"
 
 log INFO "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 log INFO "📊 Summary"
