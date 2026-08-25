@@ -14,10 +14,9 @@ Helper scripts for managing Proxmox VE LXC containers with **Telegram** and **Go
 
 - [Installation](#installation)
 - [Notification Setup](#notification-setup)
-- [Scripts](#scripts-1)
-  - [flame-auto-discover.sh](#flame-auto-discoversh)
-  - [install-avahi-all-lxcs.sh](#install-avahi-all-lxcsh)
-  - [netdata-postinstall.sh](#netdata-postinstallsh)
+- [flame-auto-discover.sh](#flame-auto-discoversh)
+- [install-avahi-all-lxcs.sh](#install-avahi-all-lxcsh)
+- [netdata-postinstall.sh](#netdata-postinstallsh)
 - [Security](#security)
 - [License](#license)
 
@@ -31,34 +30,7 @@ cd /root/scripts
 git clone https://github.com/vojacekj/proxmox-lxc-scripts.git .
 ```
 
-Or download scripts and configs individually:
-
-```bash
-mkdir -p /root/scripts
-
-# flame-auto-discover
-wget -O /root/scripts/flame-auto-discover.sh \
-  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/flame-auto-discover.sh
-wget -O /root/scripts/flame-auto-discover.conf.example \
-  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/flame-auto-discover.conf.example
-chmod +x /root/scripts/flame-auto-discover.sh
-
-# install-avahi-all-lxcs
-wget -O /root/scripts/install-avahi-all-lxcs.sh \
-  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/install-avahi-all-lxcs.sh
-chmod +x /root/scripts/install-avahi-all-lxcs.sh
-
-# netdata-postinstall
-wget -O /root/scripts/netdata-postinstall.sh \
-  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/netdata-postinstall.sh
-chmod +x /root/scripts/netdata-postinstall.sh
-
-# notification configs (shared by all scripts)
-wget -O /root/scripts/telegram.conf.example \
-  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/telegram.conf.example
-wget -O /root/scripts/gotify.conf.example \
-  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/gotify.conf.example
-```
+Or install individual scripts — see each script's section below for download commands.
 
 ## Notification Setup
 
@@ -96,16 +68,24 @@ Config is loaded from `/root/scripts/` (the script's directory) first, then from
 
 ---
 
-## Scripts
-
-### flame-auto-discover.sh
+## flame-auto-discover.sh
 
 Auto-detect running LXC containers and add them to your [Flame](https://github.com/pawelmalak/flame) dashboard with `.local` domains and official icons from [selfhst/icons](https://github.com/selfhst/icons).
 
-**Install:**
+**Download:**
 
 ```bash
 cd /root/scripts
+wget -O flame-auto-discover.sh \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/flame-auto-discover.sh
+wget -O flame-auto-discover.conf.example \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/flame-auto-discover.conf.example
+chmod +x flame-auto-discover.sh
+```
+
+**Setup:**
+
+```bash
 cp flame-auto-discover.conf.example flame-auto-discover.conf
 chmod 600 flame-auto-discover.conf
 ```
@@ -192,9 +172,18 @@ Summary
 
 ---
 
-### install-avahi-all-lxcs.sh
+## install-avahi-all-lxcs.sh
 
 Check all running LXC containers for `avahi-daemon` and install it if missing. Enables `.local` mDNS resolution for service discovery (used by flame-auto-discover).
+
+**Download:**
+
+```bash
+cd /root/scripts
+wget -O install-avahi-all-lxcs.sh \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/install-avahi-all-lxcs.sh
+chmod +x install-avahi-all-lxcs.sh
+```
 
 **Run:**
 
@@ -239,9 +228,18 @@ Summary
 
 ---
 
-### netdata-postinstall.sh
+## netdata-postinstall.sh
 
 Configure Netdata on the PVE host to monitor LXC containers via cgroups v2.
+
+**Download:**
+
+```bash
+cd /root/scripts
+wget -O netdata-postinstall.sh \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/netdata-postinstall.sh
+chmod +x netdata-postinstall.sh
+```
 
 **Run:**
 
