@@ -824,6 +824,7 @@ main() {
   local skipped_no_port=0
   local skipped_flame=0
   local failed=0
+  local added_names=""
 
   # Process each container
   for line in "${lxc_lines[@]}"; do
@@ -918,6 +919,7 @@ main() {
     if flame_insert_app "$name" "$service_url" "$icon_url" "$description"; then
       log INFO "  Added '${name}' to Flame."
       ((added++)) || true
+      added_names+="${added_names:+, }${name}"
       # Update existing lists to prevent duplicates within same run
       existing_urls="${existing_urls}"$'\n'"${service_url}"
       existing_names="${existing_names}"$'\n'"${name}"
@@ -948,6 +950,9 @@ main() {
   if (( added > 0 || failed > 0 )); then
     local REPORT="*Flame Auto-Discover: ${HOSTNAME}*"$'\n\n'
     REPORT+="Added: ${added}"$'\n'
+    if [[ -n "$added_names" ]]; then
+      REPORT+="${added_names}"$'\n'
+    fi
     REPORT+="Already existed: ${skipped_exists}"$'\n'
     REPORT+="No web service: ${skipped_no_port}"$'\n'
     REPORT+="Failed: ${failed}"
