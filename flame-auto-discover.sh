@@ -454,6 +454,9 @@ validate_flame_db() {
 save_flame_lxc_id() {
   local vmid="$1"
 
+  # Set in current session
+  FLAME_LXC_ID="$vmid"
+
   if [[ -z "$CONF_FILE" ]]; then
     CONF_FILE="${SCRIPT_DIR}/flame-auto-discover.conf"
   fi
