@@ -404,6 +404,24 @@ detect_flame_lxc() {
   return 0
 }
 
+ensure_sqlite3_in_lxc() {
+  local vmid="$1"
+
+  # Check if sqlite3 is already available
+  if pct exec "$vmid" -- command -v sqlite3 &>/dev/null; then
+    return 0
+  fi
+
+  log INFO "LXC $vmid: sqlite3 not found, installing..."
+  if pct exec "$vmid" -- bash -c "apt-get update -qq && apt-get install -y -qq sqlite3" &>/dev/null; then
+    log INFO "LXC $vmid: sqlite3 installed successfully."
+    return 0
+  fi
+
+  log ERROR "LXC $vmid: Failed to install sqlite3."
+  return 1
+}
+
 validate_flame_db() {
   local vmid="$1"
 
@@ -414,6 +432,11 @@ validate_flame_db() {
 
   if ! pct exec "$vmid" -- test -f "$FLAME_DB_PATH" 2>/dev/null; then
     log WARN "LXC $vmid: $FLAME_DB_PATH not found."
+    return 1
+  fi
+
+  # Ensure sqlite3 is installed in the LXC
+  if ! ensure_sqlite3_in_lxc "$vmid"; then
     return 1
   fi
 
