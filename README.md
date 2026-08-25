@@ -8,9 +8,32 @@ Helper scripts for managing Proxmox VE LXC containers with **Telegram** and **Go
 |--------|-------------|
 | `install-avahi-all-lxcs.sh` | Check all running LXCs for `avahi-daemon` and install it if missing |
 
+## Installation
+
+Clone the repo to `/root/scripts` on your Proxmox host:
+
+```bash
+mkdir -p /root/scripts
+cd /root/scripts
+git clone https://github.com/vojacekj/proxmox-lxc-scripts.git .
+```
+
+Or download scripts and configs individually:
+
+```bash
+mkdir -p /root/scripts
+wget -O /root/scripts/install-avahi-all-lxcs.sh \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/install-avahi-all-lxcs.sh
+wget -O /root/scripts/telegram.conf.example \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/telegram.conf.example
+wget -O /root/scripts/gotify.conf.example \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/gotify.conf.example
+chmod +x /root/scripts/install-avahi-all-lxcs.sh
+```
+
 ## Notification Setup
 
-Both **Telegram** and **Gotify** are supported. If both config files exist, notifications are sent to both channels. If only one exists, only that one receives notifications.
+Both **Telegram** and **Gotify** are supported. If both config files exist, notifications are sent to both channels. If only one exists, only that one receives notifications. Config files must be in the same directory as the scripts (`/root/scripts/`).
 
 ### Telegram
 
@@ -22,9 +45,11 @@ Both **Telegram** and **Gotify** are supported. If both config files exist, noti
    to find your **Chat ID**.
 3. Copy the example config and fill in your values:
    ```bash
+   cd /root/scripts
    cp telegram.conf.example telegram.conf
    chmod 600 telegram.conf
    ```
+4. Edit `telegram.conf` and set `TOKEN` and `CHAT_ID`.
 
 ### Gotify
 
@@ -32,30 +57,13 @@ Both **Telegram** and **Gotify** are supported. If both config files exist, noti
 2. Create an **Application** in the Gotify web UI and copy the token.
 3. Copy the example config and fill in your values:
    ```bash
+   cd /root/scripts
    cp gotify.conf.example gotify.conf
    chmod 600 gotify.conf
    ```
+4. Edit `gotify.conf` and set `GOTIFY_SERVER` and `GOTIFY_TOKEN`.
 
 Config is loaded from `/root/scripts/` (the script's directory) first, then from `/etc/pve-telegram.conf` / `/etc/pve-gotify.conf`.
-
-## Installation
-
-Clone the repo to `/root/scripts` on your Proxmox host:
-
-```bash
-mkdir -p /root/scripts
-cd /root/scripts
-git clone https://github.com/vojacekj/proxmox-lxc-scripts.git .
-```
-
-Or download a single script directly:
-
-```bash
-mkdir -p /root/scripts
-wget -O /root/scripts/install-avahi-all-lxcs.sh \
-  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/install-avahi-all-lxcs.sh
-chmod +x /root/scripts/install-avahi-all-lxcs.sh
-```
 
 ## Usage
 
@@ -79,31 +87,34 @@ crontab -e
 
 **What it does:**
 - Iterates all LXC containers on the host
-- Skips stopped containers (reports them)
+- Skips stopped containers and containers without apt-get
 - Checks if `avahi-daemon` is installed in each running LXC
 - Installs and enables the service if missing
 - Sends a summary notification via Telegram and/or Gotify
 
 **Example output:**
 ```
-[100] webserver           already installed
-[101] database            installing avahi-daemon... done
-[102] old-test            SKIP (stopped)
-
-==========================================
- Summary
-==========================================
- Installed:         1
- Already present:   1
- Skipped (stopped): 1
- Failed:            0
-==========================================
+2026-08-25 14:30:01 [INFO] ℹ️ Starting avahi-daemon check on pve01...
+2026-08-25 14:30:01 [INFO] ℹ️ Checking LXC 101 (authentik)...
+2026-08-25 14:30:03 [INFO] ✅ ID 101 (authentik): avahi-daemon already installed
+2026-08-25 14:30:03 [INFO] ℹ️ Checking LXC 102 (database)...
+2026-08-25 14:30:05 [INFO] ✅ ID 102 (database): avahi-daemon installed and started
+2026-08-25 14:30:05 [INFO] ⏭️ ID 103 (alpine-box): No apt-get found
+2026-08-25 14:30:05 [INFO] ⏭️ ID 104 (old-test): Stopped — skipping
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Summary
+   Installed:         1
+   Already present:   1
+   Skipped (stopped): 1
+   Skipped (no apt):  1
+   Failed:            0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ## Security
 
 - Config files with secrets (`telegram.conf`, `gotify.conf`) are **gitignored**
-- Config files must have `600` permissions to be loaded — the script warns and skips insecure files
+- Config files must have `600` ownership `root:root` permissions to be loaded — the script refuses to load insecure files
 - No secrets are ever printed to the terminal or included in notifications
 
 ## License
