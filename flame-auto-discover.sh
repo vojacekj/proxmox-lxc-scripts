@@ -193,8 +193,8 @@ declare -A SERVICE_MAP=(
   # DNS / Ad blocking
   ["pihole"]="pi-hole:80"
   ["pi-hole"]="pi-hole:80"
-  ["adguard"]="adguard-home:3000"
-  ["adguardhome"]="adguard-home:3000"
+  ["adguard"]="adguard-home:80"
+  ["adguardhome"]="adguard-home:80"
   ["blocky"]="blocky:4000"
 
   # Monitoring
