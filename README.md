@@ -6,6 +6,7 @@ Helper scripts for managing Proxmox VE LXC containers with **Telegram** and **Go
 
 | Script | Description |
 |--------|-------------|
+| `flame-auto-discover.sh` | Auto-detect running LXC services and add them to a Flame dashboard |
 | `install-avahi-all-lxcs.sh` | Check all running LXCs for `avahi-daemon` and install it if missing |
 | `netdata-postinstall.sh` | Configure Netdata on PVE host to monitor LXC containers via cgroups v2 |
 
@@ -70,6 +71,88 @@ Both **Telegram** and **Gotify** are supported. If both config files exist, noti
 Config is loaded from `/root/scripts/` (the script's directory) first, then from `/etc/pve-telegram.conf` / `/etc/pve-gotify.conf`.
 
 ## Usage
+
+### flame-auto-discover.sh
+
+Run on the **Proxmox host** to auto-detect LXC services and add them to your Flame dashboard:
+
+```bash
+/root/scripts/flame-auto-discover.sh
+```
+
+**What it does:**
+- Auto-detects your Flame LXC container (by name or port 5005)
+- Scans all running LXC containers for web services
+- Matches services against a built-in map of 80+ common homelab apps
+- Falls back to port scanning for unknown services
+- Fetches icons from [selfhst/icons](https://github.com/selfhst/icons) CDN
+- Adds services to Flame as `{name}.local:{port}`
+- Directly modifies Flame's SQLite database via `pct exec` (no auth needed)
+- Sends notification summary via Telegram/Gotify
+
+**Options:**
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Show what would be added without making changes |
+| `--restart` | Restart Flame service after adding new apps |
+| `--detect` | Re-detect Flame LXC container |
+| `--help` | Show help message |
+
+**First run:**
+```bash
+# Auto-detects Flame and saves LXC ID to config
+/root/scripts/flame-auto-discover.sh
+
+# You'll be prompted to confirm the detected container
+# Found Flame at LXC 103 (flame)
+# Use this Flame container? [Y/n]
+```
+
+**Configuration:**
+```bash
+cd /root/scripts
+cp flame-auto-discover.conf.example flame-auto-discover.conf
+chmod 600 flame-auto-discover.conf
+```
+
+Key config options:
+- `FLAME_LXC_ID` — auto-detected on first run, or set manually
+- `SCAN_PORTS` — ports to probe for unknown services
+- `PORT_OVERRIDES` — `"hostname:port"` pairs for non-standard ports
+- `ICON_OVERRIDES` — `"hostname:url"` pairs for custom icons
+
+**Cron (every 5 minutes):**
+```bash
+crontab -e
+# Add:
+*/5 * * * * /root/scripts/flame-auto-discover.sh >> /var/log/flame-discover.log 2>&1
+```
+
+**Built-in services:** jellyfin, plex, sonarr, radarr, prowlarr, qbittorrent, portainer, grafana, prometheus, pihole, adguard, nextcloud, vaultwarden, paperless, immich, and 60+ more.
+
+**Example output:**
+```
+2026-08-25 14:30:01 [INFO] Starting Flame Auto-Discover v2.1.0 on pve01...
+2026-08-25 14:30:01 [INFO] Using Flame LXC: 103
+2026-08-25 14:30:01 [INFO] Scanning for running LXC containers...
+2026-08-25 14:30:01 [INFO] Found 8 running LXC containers.
+2026-08-25 14:30:01 [INFO] Processing LXC 101 (jellyfin)...
+2026-08-25 14:30:01 [INFO]   IP: 10.10.10.101
+2026-08-25 14:30:01 [INFO]   Detected port: 8096
+2026-08-25 14:30:02 [INFO]   Added 'jellyfin' to Flame.
+2026-08-25 14:30:02 [INFO] Processing LXC 102 (pihole)...
+2026-08-25 14:30:02 [INFO]   Added 'pihole' to Flame.
+2026-08-25 14:30:02 [INFO] Processing LXC 104 (database)...
+2026-08-25 14:30:02 [INFO]   No web service detected on database — skipping.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Summary
+   Added:           2
+   Already existed: 0
+   No web service:  1
+   Skipped (Flame): 1
+   Failed:          0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
 
 ### install-avahi-all-lxcs.sh
 
