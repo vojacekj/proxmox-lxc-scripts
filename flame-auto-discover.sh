@@ -201,6 +201,7 @@ declare -A SERVICE_MAP=(
   ["grafana"]="grafana:3000"
   ["prometheus"]="prometheus:9090"
   ["netdata"]="netdata:19999"
+  ["nexterm"]="nexterm:6989"
   ["uptimekuma"]="uptime-kuma:3001"
   ["uptime-kuma"]="uptime-kuma:3001"
   ["gatus"]="gatus:8080"
@@ -825,6 +826,7 @@ main() {
   local skipped_flame=0
   local failed=0
   local added_names=""
+  local skipped_names=""
 
   # Process each container
   for line in "${lxc_lines[@]}"; do
@@ -898,12 +900,14 @@ main() {
     if flame_url_exists "$existing_urls" "$service_url"; then
       log INFO "  Already in Flame (URL match) — skipping."
       ((skipped_exists++)) || true
+      skipped_names+="${skipped_names:+, }${name}"
       continue
     fi
 
     if flame_name_exists "$existing_names" "$name"; then
       log INFO "  Already in Flame (name match) — skipping."
       ((skipped_exists++)) || true
+      skipped_names+="${skipped_names:+, }${name}"
       continue
     fi
 
@@ -954,6 +958,9 @@ main() {
       REPORT+="${added_names}"$'\n'
     fi
     REPORT+="Already existed: ${skipped_exists}"$'\n'
+    if [[ -n "$skipped_names" ]]; then
+      REPORT+="${skipped_names}"$'\n'
+    fi
     REPORT+="No web service: ${skipped_no_port}"$'\n'
     REPORT+="Failed: ${failed}"
 
