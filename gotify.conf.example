@@ -1,0 +1,13 @@
+# Gotify Push Notification Configuration
+# ──────────────────────────────────────
+# 1. Install Gotify via community-scripts or Docker.
+# 2. Create an Application in the Gotify web UI and copy the token.
+# 3. Copy this file to 'gotify.conf' in the same directory as the scripts,
+#    or place it at '/etc/pve-gotify.conf'.
+# 4. Set secure permissions: chmod 600 gotify.conf
+#
+# GOTIFY_SERVER: Full URL including protocol (http:// or https://)
+# GOTIFY_TOKEN:  Application token from Gotify UI
+
+GOTIFY_SERVER=""
+GOTIFY_TOKEN=""

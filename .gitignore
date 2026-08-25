@@ -1,0 +1,7 @@
+# Ignore actual configuration files containing real secrets
+telegram.conf
+gotify.conf
+
+# Editor temp files
+*.swp
+*~
