@@ -160,141 +160,148 @@ send_notification() {
 # Associative array: hostname_pattern -> "selfhst_ref:default_port"
 declare -A SERVICE_MAP=(
   # Media
-  ["jellyfin"]="jellyfin:8096"
-  ["plex"]="plex:32400"
-  ["tautulli"]="tautulli:8181"
-  ["overseerr"]="overseerr:5055"
-  ["jellyseerr"]="overseerr:5055"
-  ["emby"]="emby:8096"
+  ["jellyfin"]="jellyfin:8096:media"
+  ["plex"]="plex:32400:media"
+  ["tautulli"]="tautulli:8181:media"
+  ["overseerr"]="overseerr:5055:media"
+  ["jellyseerr"]="overseerr:5055:media"
+  ["emby"]="emby:8096:media"
+  ["audiobookshelf"]="audiobookshelf:13378:media"
 
-  # *arr stack
-  ["sonarr"]="sonarr:8989"
-  ["radarr"]="radarr:7878"
-  ["prowlarr"]="prowlarr:9696"
-  ["lidarr"]="lidarr:8686"
-  ["readarr"]="readarr:8787"
-  ["bazarr"]="bazarr:6767"
+  # Arr Stack
+  ["sonarr"]="sonarr:8989:arr-stack"
+  ["radarr"]="radarr:7878:arr-stack"
+  ["prowlarr"]="prowlarr:9696:arr-stack"
+  ["lidarr"]="lidarr:8686:arr-stack"
+  ["readarr"]="readarr:8787:arr-stack"
+  ["bazarr"]="bazarr:6767:arr-stack"
+  ["autobrr"]="autobrr:7474:arr-stack"
 
-  # Downloaders
-  ["qbittorrent"]="qbittorrent:8080"
-  ["transmission"]="transmission:9091"
-  ["deluge"]="deluge:8112"
-  ["nzbget"]="nzbget:6789"
-  ["sabnzbd"]="sabnzbd:8080"
+  # Downloads
+  ["qbittorrent"]="qbittorrent:8080:downloads"
+  ["transmission"]="transmission:9091:downloads"
+  ["deluge"]="deluge:8112:downloads"
+  ["nzbget"]="nzbget:6789:downloads"
+  ["sabnzbd"]="sabnzbd:8080:downloads"
 
   # Infrastructure
-  ["portainer"]="portainer:9443"
-  ["traefik"]="traefik:8080"
-  ["nginxproxymanager"]="nginx-proxy-manager:81"
-  ["npm"]="nginx-proxy-manager:81"
-  ["caddy"]="caddy:2019"
-  ["haproxy"]="haproxy:8404"
+  ["portainer"]="portainer:9443:infrastructure"
+  ["traefik"]="traefik:8080:infrastructure"
+  ["nginxproxymanager"]="nginx-proxy-manager:81:infrastructure"
+  ["npm"]="nginx-proxy-manager:81:infrastructure"
+  ["caddy"]="caddy:2019:infrastructure"
+  ["haproxy"]="haproxy:8404:infrastructure"
+  ["dockge"]="dockge:5001:infrastructure"
 
-  # DNS / Ad blocking
-  ["pihole"]="pi-hole:80"
-  ["pi-hole"]="pi-hole:80"
-  ["adguard"]="adguard-home:80"
-  ["adguardhome"]="adguard-home:80"
-  ["blocky"]="blocky:4000"
+  # DNS
+  ["pihole"]="pi-hole:80:dns"
+  ["pi-hole"]="pi-hole:80:dns"
+  ["adguard"]="adguard-home:80:dns"
+  ["adguardhome"]="adguard-home:80:dns"
+  ["blocky"]="blocky:4000:dns"
 
   # Monitoring
-  ["grafana"]="grafana:3000"
-  ["prometheus"]="prometheus:9090"
-  ["netdata"]="netdata:19999"
-  ["nexterm"]="nexterm:6989"
-  ["uptimekuma"]="uptime-kuma:3001"
-  ["uptime-kuma"]="uptime-kuma:3001"
-  ["gatus"]="gatus:8080"
+  ["grafana"]="grafana:3000:monitoring"
+  ["prometheus"]="prometheus:9090:monitoring"
+  ["netdata"]="netdata:19999:monitoring"
+  ["uptimekuma"]="uptime-kuma:3001:monitoring"
+  ["uptime-kuma"]="uptime-kuma:3001:monitoring"
+  ["gatus"]="gatus:8080:monitoring"
+  ["beszel"]="beszel:8090:monitoring"
 
   # Automation
-  ["n8n"]="n8n:5678"
-  ["node-red"]="node-red:1880"
-  ["nodered"]="node-red:1880"
-  ["homeassistant"]="home-assistant:8123"
-  ["home-assistant"]="home-assistant:8123"
-  ["hass"]="home-assistant:8123"
-  ["esphome"]="esphome:6052"
-
-  # Smart Home
-  ["zigbee2mqtt"]="zigbee2mqtt:8080"
-  ["mosquitto"]="mosquitto:1883"
-  ["mqtt"]="mqtt:1883"
-  ["frigate"]="frigate:5000"
-
-  # Git / Code
-  ["gitea"]="gitea:3000"
-  ["forgejo"]="forgejo:3000"
-  ["gitlab"]="gitlab:443"
-  ["code-server"]="code-server:8443"
-
-  # Databases
-  ["adminer"]="adminer:8080"
-  ["phpmyadmin"]="phpmyadmin:80"
-  ["cloudbeaver"]="cloudbeaver:8978"
+  ["n8n"]="n8n:5678:automation"
+  ["node-red"]="node-red:1880:automation"
+  ["nodered"]="node-red:1880:automation"
+  ["homeassistant"]="home-assistant:8123:automation"
+  ["home-assistant"]="home-assistant:8123:automation"
+  ["hass"]="home-assistant:8123:automation"
+  ["esphome"]="esphome:6052:automation"
+  ["zigbee2mqtt"]="zigbee2mqtt:8080:automation"
+  ["frigate"]="frigate:5000:automation"
+  ["mosquitto"]="mosquitto:1883:automation"
+  ["mqtt"]="mqtt:1883:automation"
 
   # Cloud / Storage
-  ["nextcloud"]="nextcloud:443"
-  ["owncloud"]="owncloud:443"
-  ["seafile"]="seafile:80"
-  ["filebrowser"]="file-browser:8080"
-  ["file-browser"]="file-browser:8080"
-  ["minio"]="minio:9001"
-  ["immich"]="immich:2283"
+  ["nextcloud"]="nextcloud:443:cloud"
+  ["owncloud"]="owncloud:443:cloud"
+  ["seafile"]="seafile:80:cloud"
+  ["filebrowser"]="file-browser:8080:cloud"
+  ["file-browser"]="file-browser:8080:cloud"
+  ["minio"]="minio:9001:cloud"
+  ["immich"]="immich:2283:cloud"
+  ["paperless"]="paperless:8000:cloud"
+  ["paperless-ngx"]="paperless-ngx:8000:cloud"
 
-  # Passwords / Auth
-  ["vaultwarden"]="vaultwarden:8000"
-  ["bitwarden"]="vaultwarden:8000"
-  ["authentik"]="authentik:9000"
-  ["authelia"]="authelia:9091"
+  # Git / Code
+  ["gitea"]="gitea:3000:git"
+  ["forgejo"]="forgejo:3000:git"
+  ["gitlab"]="gitlab:443:git"
+  ["code-server"]="code-server:8443:git"
+  ["nexterm"]="nexterm:6989:git"
+
+  # Auth
+  ["vaultwarden"]="vaultwarden:8000:auth"
+  ["bitwarden"]="vaultwarden:8000:auth"
+  ["authentik"]="authentik:9000:auth"
+  ["authelia"]="authelia:9091:auth"
 
   # Communication
-  ["matrix"]="matrix:8008"
-  ["gotify"]="gotify:8080"
-  ["ntfy"]="ntfy:80"
+  ["matrix"]="matrix:8008:communication"
+  ["gotify"]="gotify:8080:communication"
+  ["ntfy"]="ntfy:80:communication"
+  ["gotosocial"]="gotosocial:8080:communication"
+  ["lemmy"]="lemmy:8536:communication"
+  ["friendica"]="friendica:80:communication"
+  ["discourse"]="discourse:80:communication"
+  ["ghost"]="ghost:2368:communication"
 
   # Documents
-  ["bookstack"]="bookstack:80"
-  ["wikijs"]="wikijs:3000"
-  ["dokuwiki"]="dokuwiki:80"
-  ["outline"]="outline:3000"
-  ["paperless"]="paperless:8000"
-  ["paperless-ngx"]="paperless-ngx:8000"
-  ["mealie"]="mealie:9925"
-  ["karakeep"]="karakeep:3000"
+  ["bookstack"]="bookstack:80:documents"
+  ["wikijs"]="wikijs:3000:documents"
+  ["dokuwiki"]="dokuwiki:80:documents"
+  ["outline"]="outline:3000:documents"
+  ["mealie"]="mealie:9925:documents"
+  ["karakeep"]="karakeep:3000:documents"
+  ["hedgedoc"]="hedgedoc:3000:documents"
+  ["drawio"]="draw-io:8080:documents"
 
   # Dashboards
-  ["dashy"]="dashy:4000"
-  ["heimdall"]="heimdall:80"
-  ["homarr"]="homarr:7575"
-  ["homepage"]="homepage:3000"
-  ["organizr"]="organizr:80"
+  ["dashy"]="dashy:4000:dashboards"
+  ["heimdall"]="heimdall:80:dashboards"
+  ["homarr"]="homarr:7575:dashboards"
+  ["homepage"]="homepage:3000:dashboards"
+  ["organizr"]="organizr:80:dashboards"
 
   # Analytics
-  ["plausible"]="plausible:8000"
-  ["matomo"]="matomo:80"
-  ["umami"]="umami:3000"
+  ["plausible"]="plausible:8000:analytics"
+  ["matomo"]="matomo:80:analytics"
+  ["umami"]="umami:3000:analytics"
+
+  # Databases
+  ["adminer"]="adminer:8080:databases"
+  ["phpmyadmin"]="phpmyadmin:80:databases"
+  ["cloudbeaver"]="cloudbeaver:8978:databases"
+
+  # Proxmox
+  ["pve"]="proxmox:8006:proxmox"
+  ["pve01"]="proxmox:8006:proxmox"
+  ["pve02"]="proxmox:8006:proxmox"
+  ["proxmox"]="proxmox:8006:proxmox"
 
   # Other
-  ["changedetection"]="changedetection:5000"
-  ["cdio"]="changedetection:5000"
-  ["dockge"]="dockge:5001"
-  ["actualbudget"]="actual-budget:5006"
-  ["actual"]="actual-budget:5006"
-  ["duplicati"]="duplicati:8200"
-  ["freshrss"]="freshrss:80"
-  ["filerun"]="filerun:80"
-  ["drawio"]="draw-io:8080"
-  ["grocy"]="grocy:80"
-  ["firefly"]="firefly-iii:8080"
-  ["firefly-iii"]="firefly-iii:8080"
-  ["ghost"]="ghost:2368"
-  ["gotosocial"]="gotosocial:8080"
-  ["hedgedoc"]="hedgedoc:3000"
-  ["discourse"]="discourse:80"
-  ["friendica"]="friendica:80"
-  ["lemmy"]="lemmy:8536"
-  ["akkoma"]="akkoma:8080"
-  ["librespeed"]="librespeed:80"
+  ["changedetection"]="changedetection:5000:other"
+  ["cdio"]="changedetection:5000:other"
+  ["actualbudget"]="actual-budget:5006:other"
+  ["actual"]="actual-budget:5006:other"
+  ["duplicati"]="duplicati:8200:other"
+  ["freshrss"]="freshrss:80:other"
+  ["filerun"]="filerun:80:other"
+  ["grocy"]="grocy:80:other"
+  ["firefly"]="firefly-iii:8080:other"
+  ["firefly-iii"]="firefly-iii:8080:other"
+  ["akkoma"]="akkoma:8080:other"
+  ["librespeed"]="librespeed:80:other"
 )
 
 # --- FLAME LXC DETECTION ---
@@ -551,11 +558,72 @@ flame_name_exists() {
   return 1
 }
 
+# --- CATEGORY MANAGEMENT ---
+flame_get_or_create_category() {
+  local category_name="$1"
+
+  # Escape single quotes for SQL
+  local escaped_name="${category_name//\'/\'\'}"
+
+  # Try to get existing category
+  local sql="SELECT id FROM categories WHERE name='${escaped_name}';"
+  local result
+  result=$(pct exec "$FLAME_LXC_ID" -- sqlite3 "$FLAME_DB_PATH" "$sql" 2>/dev/null)
+
+  if [[ -n "$result" ]]; then
+    echo "$result"
+    return 0
+  fi
+
+  # Create new category
+  sql="INSERT INTO categories (name, createdAt, updatedAt) VALUES ('${escaped_name}', datetime('now'), datetime('now'));"
+  result=$(pct exec "$FLAME_LXC_ID" -- sqlite3 "$FLAME_DB_PATH" "$sql" 2>&1)
+
+  if [[ $? -ne 0 ]]; then
+    log ERROR "Failed to create category '${category_name}': $result"
+    return 1
+  fi
+
+  # Get the ID of the newly created category
+  sql="SELECT id FROM categories WHERE name='${escaped_name}';"
+  result=$(pct exec "$FLAME_LXC_ID" -- sqlite3 "$FLAME_DB_PATH" "$sql" 2>/dev/null)
+
+  if [[ -n "$result" ]]; then
+    echo "$result"
+    return 0
+  fi
+
+  log ERROR "Failed to get category ID for '${category_name}'"
+  return 1
+}
+
+# Initialize categories and cache their IDs
+declare -A CATEGORY_IDS
+
+init_categories() {
+  local categories=("proxmox" "media" "arr-stack" "downloads" "infrastructure" "dns" "monitoring" "automation" "cloud" "git" "auth" "communication" "documents" "dashboards" "analytics" "databases" "other")
+
+  log INFO "Initializing categories..."
+  for cat in "${categories[@]}"; do
+    local cat_id
+    if cat_id=$(flame_get_or_create_category "$cat"); then
+      CATEGORY_IDS["$cat"]="$cat_id"
+      log INFO "  Category '${cat}' -> ID ${cat_id}"
+    else
+      log ERROR "  Failed to initialize category '${cat}'"
+      return 1
+    fi
+  done
+
+  return 0
+}
+
 flame_insert_app() {
   local name="$1"
   local url="$2"
   local icon="$3"
   local description="$4"
+  local category="$5"
 
   # Escape single quotes for SQL
   name="${name//\'/\'\'}"
@@ -563,7 +631,10 @@ flame_insert_app() {
   icon="${icon//\'/\'\'}"
   description="${description//\'/\'\'}"
 
-  local sql="INSERT INTO apps (name, url, icon, description, isPinned, isPublic, createdAt, updatedAt) VALUES ('${name}', '${url}', '${icon}', '${description}', 1, 1, datetime('now'), datetime('now'));"
+  # Get category ID (default to "other" if not specified or not found)
+  local cat_id="${CATEGORY_IDS[$category]:-${CATEGORY_IDS[other]}}"
+
+  local sql="INSERT INTO apps (name, url, icon, description, categoryId, isPinned, isPublic, createdAt, updatedAt) VALUES ('${name}', '${url}', '${icon}', '${description}', ${cat_id}, 1, 1, datetime('now'), datetime('now'));"
 
   local result
   result=$(pct exec "$FLAME_LXC_ID" -- sqlite3 "$FLAME_DB_PATH" "$sql" 2>&1)
@@ -834,6 +905,12 @@ main() {
     fi
   fi
 
+  # Initialize categories
+  if ! init_categories; then
+    log ERROR "Failed to initialize categories."
+    exit 1
+  fi
+
   # Get existing apps from Flame
   log INFO "Fetching existing Flame applications..."
   local existing_urls
@@ -903,12 +980,14 @@ main() {
 
     # Check manual overrides first
     port=$(get_port_override "$name_lower" 2>/dev/null)
+    local category="other"
 
     # Check service map
     if [[ -z "$port" ]]; then
       local service_info
       if service_info=$(lookup_service "$name_lower"); then
-        port="${service_info##*:}"
+        IFS=':' read -r _ port category <<< "$service_info"
+        category="${category:-other}"
       fi
     fi
 
@@ -967,13 +1046,13 @@ main() {
     local description="Discovered from Proxmox LXC (${vmid})"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-      log INFO "  [DRY RUN] Would add: ${name} -> ${service_url}"
+      log INFO "  [DRY RUN] Would add: ${name} -> ${service_url} [${category}]"
       ((added++)) || true
       continue
     fi
 
-    if flame_insert_app "$name" "$service_url" "$icon_url" "$description"; then
-      log INFO "  Added '${name}' to Flame."
+    if flame_insert_app "$name" "$service_url" "$icon_url" "$description" "$category"; then
+      log INFO "  Added '${name}' to Flame [${category}]."
       ((added++)) || true
       added_names+="${added_names:+, }${name}"
       # Update existing lists to prevent duplicates within same run
