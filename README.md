@@ -138,12 +138,12 @@ chmod 600 flame-auto-discover.conf
 | `PORT_OVERRIDES` | `"hostname:port"` pairs for non-standard ports |
 | `ICON_OVERRIDES` | `"hostname:url"` pairs for custom icons |
 
-**Cron (every 5 minutes):**
+**Cron (every 15 minutes):**
 
 ```bash
 crontab -e
 # Add:
-*/5 * * * * /root/scripts/flame-auto-discover.sh >> /var/log/flame-discover.log 2>&1
+*/15 * * * * /root/scripts/flame-auto-discover.sh >> /var/log/flame-discover.log 2>&1
 ```
 
 **Built-in services:** jellyfin, plex, sonarr, radarr, prowlarr, qbittorrent, portainer, grafana, prometheus, pihole, adguard, nextcloud, vaultwarden, paperless, immich, and 60+ more.
