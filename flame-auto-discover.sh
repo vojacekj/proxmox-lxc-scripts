@@ -654,20 +654,8 @@ get_icon_url() {
     return 0
   fi
 
-  # Fallback: try favicon
-  local port="${2:-80}"
-  local protocol="http"
-  [[ "$port" == "443" || "$port" == "8443" ]] && protocol="https"
-
-  local favicon_url="${protocol}://${hostname_lower}.local:${port}/favicon.ico"
-  local http_code
-  http_code=$(curl --proto '=http' --tlsv1.2 -sk -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 5 "$favicon_url" 2>/dev/null)
-  if [[ "$http_code" == "200" ]]; then
-    echo "$favicon_url"
-    return 0
-  fi
-
-  # Ultimate fallback
+  # Fallback: use generic server icon from selfhst/icons CDN
+  # (local favicons don't work from inside Flame LXC)
   echo "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/server.svg"
   return 0
 }
