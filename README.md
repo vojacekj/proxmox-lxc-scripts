@@ -100,11 +100,13 @@ chmod 600 flame-auto-discover.conf
 - Auto-detects your Flame LXC container (by name or port 5005)
 - Scans all running LXC containers for web services
 - Matches services against a built-in map of 80+ common homelab apps
-- Falls back to port scanning for unknown services
+- Queries [community-scripts](https://github.com/community-scripts/ProxmoxVE) GitHub for unrecognized services (cached 7 days)
+- Falls back to port scanning if still unknown
 - Fetches icons from [selfhst/icons](https://github.com/selfhst/icons) CDN
-- Adds services to Flame as `{name}.local:{port}`
+- Adds services to Flame as `{name}.local:{port}` (pinned, public)
 - Directly modifies Flame's SQLite database via `pct exec` (no auth needed)
-- Sends notification summary via Telegram/Gotify
+- Auto-installs `sqlite3` in Flame LXC if missing
+- Sends notification summary with service names via Telegram/Gotify
 
 **Options:**
 
@@ -158,11 +160,15 @@ crontab -e
 2026-08-25 14:30:02 [INFO]   Added 'jellyfin' to Flame.
 2026-08-25 14:30:02 [INFO] Processing LXC 102 (pihole)...
 2026-08-25 14:30:02 [INFO]   Added 'pihole' to Flame.
-2026-08-25 14:30:02 [INFO] Processing LXC 104 (database)...
-2026-08-25 14:30:02 [INFO]   No web service detected on database — skipping.
+2026-08-25 14:30:02 [INFO] Processing LXC 105 (nexterm)...
+2026-08-25 14:30:02 [INFO]   Not in built-in map, checking community-scripts...
+2026-08-25 14:30:03 [INFO]   Found in community-scripts: port 6989
+2026-08-25 14:30:03 [INFO]   Added 'nexterm' to Flame.
+2026-08-25 14:30:03 [INFO] Processing LXC 104 (database)...
+2026-08-25 14:30:03 [INFO]   No web service detected on database — skipping.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Summary
-   Added:           2
+   Added:           3
    Already existed: 0
    No web service:  1
    Skipped (Flame): 1
