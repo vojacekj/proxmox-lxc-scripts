@@ -878,10 +878,9 @@ main() {
     vmid=$(echo "$line" | awk '{print $1}')
     name=$(echo "$line" | awk '{print $3}')
 
-    # Skip Flame itself
-    if [[ "$vmid" == "$FLAME_LXC_ID" ]]; then
-      log INFO "Skipping LXC ${vmid} (${name}) — this is Flame."
-      ((skipped_flame++)) || true
+    # Skip if in SKIP_APPS list
+    if [[ ",${SKIP_APPS}," == *",${name_lower},"* ]]; then
+      log INFO "Skipping LXC ${vmid} (${name}) — in SKIP_APPS list."
       continue
     fi
 

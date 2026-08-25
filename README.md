@@ -137,6 +137,7 @@ chmod 600 flame-auto-discover.conf
 | `SCAN_PORTS` | Comma-separated ports to probe for unknown services |
 | `PORT_OVERRIDES` | `"hostname:port"` pairs for non-standard ports |
 | `ICON_OVERRIDES` | `"hostname:url"` pairs for custom icons |
+| `SKIP_APPS` | Comma-separated container names to skip (e.g., `"pve,monitoring"`) |
 
 **Cron (every 15 minutes):**
 
@@ -172,7 +173,6 @@ Summary
    Added:           3
    Already existed: 0
    No web service:  1
-   Skipped (Flame): 1
    Failed:          0
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

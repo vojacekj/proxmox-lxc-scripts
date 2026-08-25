@@ -45,3 +45,17 @@ PORT_OVERRIDES=""
 # Examples:
 #   ICON_OVERRIDES="custom-app:https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/docker.svg my-tool:https://raw.githubusercontent.com/example/logo/main/icon.png"
 ICON_OVERRIDES=""
+
+# --- Skip Apps ---
+# Comma-separated container names to skip (case-insensitive)
+# Use to exclude specific LXCs from being added to Flame
+#
+# Single skip:
+#   SKIP_APPS="monitoring"
+#
+# Multiple skips:
+#   SKIP_APPS="pve,monitoring,backup"
+#
+# Examples:
+#   SKIP_APPS="proxmox,pihole,docker"
+SKIP_APPS=""
