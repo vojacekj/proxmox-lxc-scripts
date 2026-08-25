@@ -212,7 +212,7 @@ for line in "${lxc_lines[@]}"; do
   if timeout 120 pct exec "$CTID" -- bash -c "apt-get update -qq && apt-get install -y -qq avahi-daemon" &>/dev/null; then
     timeout 30 pct exec "$CTID" -- systemctl enable --now avahi-daemon &>/dev/null
     log INFO "✅ ID $CTID ($CTNAME): avahi-daemon installed and started"
-    REPORT+="• ID $CTID ($CTNAME): ✅ Installed"$'\n'
+    REPORT+="• ID $CTID ($CTNAME): ✅ Installed — \`${CTNAME}.local\`"$'\n'
     ((installed++)) || true
   else
     log ERROR "❌ ID $CTID ($CTNAME): Failed to install avahi-daemon"
