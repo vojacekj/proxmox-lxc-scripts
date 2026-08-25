@@ -878,6 +878,9 @@ main() {
     vmid=$(echo "$line" | awk '{print $1}')
     name=$(echo "$line" | awk '{print $3}')
 
+    local name_lower
+    name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+
     # Skip if in SKIP_APPS list
     if [[ ",${SKIP_APPS}," == *",${name_lower},"* ]]; then
       log INFO "Skipping LXC ${vmid} (${name}) — in SKIP_APPS list."
@@ -897,8 +900,6 @@ main() {
 
     # Determine port
     local port=""
-    local name_lower
-    name_lower=$(echo "$name" | tr '[:upper:]' '[:lower:]')
 
     # Check manual overrides first
     port=$(get_port_override "$name_lower" 2>/dev/null)
