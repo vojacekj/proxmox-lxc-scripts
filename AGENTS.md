@@ -45,6 +45,14 @@ Proxmox VE helper scripts for LXC container management with Telegram/Gotify noti
 - `normalize_url()` — Strip trailing slashes and default ports for dedup
 - `flame_url_exists()` / `flame_name_exists()` — Case-insensitive dedup
 
+### Skip Behavior
+
+- `SKIP_APPS` config variable controls which containers are excluded
+- Format: comma-separated container names, case-insensitive (e.g., `"pve,monitoring"`)
+- Checked after name normalization: `[[ ",${SKIP_APPS}," == *",${name_lower},"* ]]`
+- All LXCs processed by default (no built-in skip list)
+- Flame itself is included in the list — not skipped
+
 ### Config File
 
 `flame-auto-discover.conf` (permissions: 600, root:root required)
