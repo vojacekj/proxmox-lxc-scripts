@@ -221,7 +221,7 @@ for line in "${lxc_lines[@]}"; do
   fi
 done
 
-REPORT+=$'\n'"*📊 Summary:*"$'\n'
+REPORT+=$'\n'"📊 Summary:"$'\n'
 REPORT+="• Installed: \`${installed}\`"$'\n'
 REPORT+="• Already present: \`${skipped_already}\`"$'\n'
 REPORT+="• Skipped (stopped): \`${skipped_stopped}\`"$'\n'
