@@ -11,7 +11,6 @@ Helper scripts for managing Proxmox VE LXC containers with **Telegram** and **Go
 - [Scripts](#scripts)
   - [flame-auto-discover.sh](#flame-auto-discoversh)
   - [install-avahi-all-lxcs.sh](#install-avahi-all-lxcsh)
-  - [netdata-postinstall.sh](#netdata-postinstallsh)
 - [Security](#security)
 - [License](#license)
 
@@ -21,7 +20,6 @@ Helper scripts for managing Proxmox VE LXC containers with **Telegram** and **Go
 |--------|-------------|
 | [`flame-auto-discover.sh`](#flame-auto-discoversh) | Auto-detect running LXC services and add them to a Flame dashboard |
 | [`install-avahi-all-lxcs.sh`](#install-avahi-all-lxcsh) | Check all running LXCs for `avahi-daemon` and install it if missing |
-| [`netdata-postinstall.sh`](#netdata-postinstallsh) | Configure Netdata on PVE host to monitor LXC containers via cgroups v2 |
 
 ## Installation
 
@@ -233,52 +231,6 @@ Summary
    Skipped (no apt):  1
    Failed:            0
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
----
-
-## netdata-postinstall.sh
-
-Configure Netdata on the PVE host to monitor LXC containers via cgroups v2.
-
-**Download:**
-
-```bash
-cd /root/scripts
-wget -O netdata-postinstall.sh \
-  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/netdata-postinstall.sh
-chmod +x netdata-postinstall.sh
-```
-
-**Run:**
-
-```bash
-/root/scripts/netdata-postinstall.sh
-```
-
-**What it does:**
-- Detects cgroups v2 (unified hierarchy) on the Proxmox host
-- Adds `netdata` user to `www-data` group for `/etc/pve` access
-- Creates drop-in config at `/etc/netdata/netdata.conf.d/proxmox-cgroups-v2.conf`
-- Overrides Netdata's default cgroup exclusion patterns to enable `/lxc/<vmid>/` paths
-- Configures cgroup-name helper for VMID-to-name resolution
-- Restarts Netdata and verifies container discovery
-
-**Why is this needed?**
-
-Proxmox 8+ uses cgroups v2 with containers at `/sys/fs/cgroup/lxc/<vmid>/`. Netdata's default config excludes `/lxc` entirely, so LXC containers don't appear in the dashboard. This script fixes that.
-
-**Example output:**
-
-```
-2026-08-25 19:10:01 [INFO] Detected cgroups version: v2
-2026-08-25 19:10:01 [INFO] Added netdata user to www-data group
-2026-08-25 19:10:01 [INFO] Found 11 LXC container configurations in /etc/pve/lxc/
-2026-08-25 19:10:01 [INFO] Created drop-in configuration: /etc/netdata/netdata.conf.d/proxmox-cgroups-v2.conf
-2026-08-25 19:10:02 [INFO] Restarting Netdata...
-2026-08-25 19:10:02 [INFO] Netdata restarted successfully
-2026-08-25 19:10:32 [INFO] === Post-Install Complete ===
-2026-08-25 19:10:32 [INFO] Access Netdata at: http://192.168.1.238:19999
 ```
 
 ---

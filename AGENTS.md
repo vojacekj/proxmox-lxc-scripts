@@ -12,7 +12,6 @@ Proxmox VE helper scripts for LXC container management with Telegram/Gotify noti
 |--------|---------|
 | `flame-auto-discover.sh` | Auto-detect LXC services, add to Flame dashboard |
 | `install-avahi-all-lxcs.sh` | Install avahi-daemon in all running LXCs |
-| `netdata-postinstall.sh` | Configure Netdata for cgroups v2 LXC monitoring |
 
 ## flame-auto-discover.sh
 
