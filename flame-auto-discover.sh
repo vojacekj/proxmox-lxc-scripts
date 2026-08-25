@@ -496,11 +496,58 @@ flame_get_existing_urls() {
   echo "$response"
 }
 
+flame_get_existing_names() {
+  local response
+  response=$(pct exec "$FLAME_LXC_ID" -- sqlite3 "$FLAME_DB_PATH" \
+    "SELECT name FROM apps;" 2>/dev/null)
+  echo "$response"
+}
+
+# Normalize URL for comparison (lowercase, remove trailing slash, strip default ports)
+normalize_url() {
+  local url="$1"
+  url="${url%%/}"          # remove trailing slash
+  url="${url,,}"           # lowercase
+  # Strip default ports
+  url="${url/:80$/}"       # remove :80 from http
+  url="${url/:443$/}"      # remove :443 from https
+  echo "$url"
+}
+
 flame_url_exists() {
   local existing_urls="$1"
   local url="$2"
 
-  echo "$existing_urls" | grep -qxF "$url"
+  local norm_url
+  norm_url=$(normalize_url "$url")
+
+  while IFS= read -r existing; do
+    [[ -z "$existing" ]] && continue
+    local norm_existing
+    norm_existing=$(normalize_url "$existing")
+    if [[ "$norm_existing" == "$norm_url" ]]; then
+      return 0
+    fi
+  done <<< "$existing_urls"
+
+  return 1
+}
+
+flame_name_exists() {
+  local existing_names="$1"
+  local name="$2"
+
+  local name_lower="${name,,}"
+
+  while IFS= read -r existing; do
+    [[ -z "$existing" ]] && continue
+    local existing_lower="${existing,,}"
+    if [[ "$existing_lower" == "$name_lower" ]]; then
+      return 0
+    fi
+  done <<< "$existing_names"
+
+  return 1
 }
 
 flame_insert_app() {
@@ -764,6 +811,12 @@ main() {
     existing_urls=""
   fi
 
+  local existing_names
+  existing_names=$(flame_get_existing_names)
+  if [[ -z "$existing_names" ]]; then
+    existing_names=""
+  fi
+
   # Get running LXC containers
   log INFO "Scanning for running LXC containers..."
   local lxc_lines
@@ -852,9 +905,15 @@ main() {
     icon_url=$(get_icon_url "$name_lower" "$port")
     log INFO "  Icon: ${icon_url}"
 
-    # Check if already exists in Flame
+    # Check if already exists in Flame (by URL or name)
     if flame_url_exists "$existing_urls" "$service_url"; then
-      log INFO "  Already in Flame — skipping."
+      log INFO "  Already in Flame (URL match) — skipping."
+      ((skipped_exists++)) || true
+      continue
+    fi
+
+    if flame_name_exists "$existing_names" "$name"; then
+      log INFO "  Already in Flame (name match) — skipping."
       ((skipped_exists++)) || true
       continue
     fi
@@ -871,8 +930,9 @@ main() {
     if flame_insert_app "$name" "$service_url" "$icon_url" "$description"; then
       log INFO "  Added '${name}' to Flame."
       ((added++)) || true
-      # Update existing URLs list
+      # Update existing lists to prevent duplicates within same run
       existing_urls="${existing_urls}"$'\n'"${service_url}"
+      existing_names="${existing_names}"$'\n'"${name}"
     else
       ((failed++)) || true
     fi
