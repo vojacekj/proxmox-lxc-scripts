@@ -515,7 +515,7 @@ flame_insert_app() {
   icon="${icon//\'/\'\'}"
   description="${description//\'/\'\'}"
 
-  local sql="INSERT INTO apps (name, url, icon, description, isPublic, createdAt, updatedAt) VALUES ('${name}', '${url}', '${icon}', '${description}', 1, datetime('now'), datetime('now'));"
+  local sql="INSERT INTO apps (name, url, icon, description, isPinned, isPublic, createdAt, updatedAt) VALUES ('${name}', '${url}', '${icon}', '${description}', 1, 1, datetime('now'), datetime('now'));"
 
   local result
   result=$(pct exec "$FLAME_LXC_ID" -- sqlite3 "$FLAME_DB_PATH" "$sql" 2>&1)
