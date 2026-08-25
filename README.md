@@ -10,6 +10,17 @@ Helper scripts for managing Proxmox VE LXC containers with **Telegram** and **Go
 | `install-avahi-all-lxcs.sh` | Check all running LXCs for `avahi-daemon` and install it if missing |
 | `netdata-postinstall.sh` | Configure Netdata on PVE host to monitor LXC containers via cgroups v2 |
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Notification Setup](#notification-setup)
+- [Scripts](#scripts-1)
+  - [flame-auto-discover.sh](#flame-auto-discoversh)
+  - [install-avahi-all-lxcs.sh](#install-avahi-all-lxcsh)
+  - [netdata-postinstall.sh](#netdata-postinstallsh)
+- [Security](#security)
+- [License](#license)
+
 ## Installation
 
 Clone the repo to `/root/scripts` on your Proxmox host:
@@ -24,16 +35,29 @@ Or download scripts and configs individually:
 
 ```bash
 mkdir -p /root/scripts
+
+# flame-auto-discover
+wget -O /root/scripts/flame-auto-discover.sh \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/flame-auto-discover.sh
+wget -O /root/scripts/flame-auto-discover.conf.example \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/flame-auto-discover.conf.example
+chmod +x /root/scripts/flame-auto-discover.sh
+
+# install-avahi-all-lxcs
 wget -O /root/scripts/install-avahi-all-lxcs.sh \
   https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/install-avahi-all-lxcs.sh
+chmod +x /root/scripts/install-avahi-all-lxcs.sh
+
+# netdata-postinstall
 wget -O /root/scripts/netdata-postinstall.sh \
   https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/netdata-postinstall.sh
+chmod +x /root/scripts/netdata-postinstall.sh
+
+# notification configs (shared by all scripts)
 wget -O /root/scripts/telegram.conf.example \
   https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/telegram.conf.example
 wget -O /root/scripts/gotify.conf.example \
   https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/gotify.conf.example
-chmod +x /root/scripts/install-avahi-all-lxcs.sh
-chmod +x /root/scripts/netdata-postinstall.sh
 ```
 
 ## Notification Setup
@@ -70,11 +94,23 @@ Both **Telegram** and **Gotify** are supported. If both config files exist, noti
 
 Config is loaded from `/root/scripts/` (the script's directory) first, then from `/etc/pve-telegram.conf` / `/etc/pve-gotify.conf`.
 
-## Usage
+---
+
+## Scripts
 
 ### flame-auto-discover.sh
 
-Run on the **Proxmox host** to auto-detect LXC services and add them to your Flame dashboard:
+Auto-detect running LXC containers and add them to your [Flame](https://github.com/pawelmalak/flame) dashboard with `.local` domains and official icons from [selfhst/icons](https://github.com/selfhst/icons).
+
+**Install:**
+
+```bash
+cd /root/scripts
+cp flame-auto-discover.conf.example flame-auto-discover.conf
+chmod 600 flame-auto-discover.conf
+```
+
+**Run:**
 
 ```bash
 /root/scripts/flame-auto-discover.sh
@@ -91,6 +127,7 @@ Run on the **Proxmox host** to auto-detect LXC services and add them to your Fla
 - Sends notification summary via Telegram/Gotify
 
 **Options:**
+
 | Flag | Description |
 |------|-------------|
 | `--dry-run` | Show what would be added without making changes |
@@ -99,6 +136,7 @@ Run on the **Proxmox host** to auto-detect LXC services and add them to your Fla
 | `--help` | Show help message |
 
 **First run:**
+
 ```bash
 # Auto-detects Flame and saves LXC ID to config
 /root/scripts/flame-auto-discover.sh
@@ -109,19 +147,16 @@ Run on the **Proxmox host** to auto-detect LXC services and add them to your Fla
 ```
 
 **Configuration:**
-```bash
-cd /root/scripts
-cp flame-auto-discover.conf.example flame-auto-discover.conf
-chmod 600 flame-auto-discover.conf
-```
 
-Key config options:
-- `FLAME_LXC_ID` — auto-detected on first run, or set manually
-- `SCAN_PORTS` — ports to probe for unknown services
-- `PORT_OVERRIDES` — `"hostname:port"` pairs for non-standard ports
-- `ICON_OVERRIDES` — `"hostname:url"` pairs for custom icons
+| Option | Description |
+|--------|-------------|
+| `FLAME_LXC_ID` | Auto-detected on first run, or set manually |
+| `SCAN_PORTS` | Comma-separated ports to probe for unknown services |
+| `PORT_OVERRIDES` | `"hostname:port"` pairs for non-standard ports |
+| `ICON_OVERRIDES` | `"hostname:url"` pairs for custom icons |
 
 **Cron (every 5 minutes):**
+
 ```bash
 crontab -e
 # Add:
@@ -131,6 +166,7 @@ crontab -e
 **Built-in services:** jellyfin, plex, sonarr, radarr, prowlarr, qbittorrent, portainer, grafana, prometheus, pihole, adguard, nextcloud, vaultwarden, paperless, immich, and 60+ more.
 
 **Example output:**
+
 ```
 2026-08-25 14:30:01 [INFO] Starting Flame Auto-Discover v2.1.0 on pve01...
 2026-08-25 14:30:01 [INFO] Using Flame LXC: 103
@@ -154,17 +190,60 @@ Summary
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
+---
+
 ### install-avahi-all-lxcs.sh
 
-Run on the **Proxmox host** (not inside an LXC):
+Check all running LXC containers for `avahi-daemon` and install it if missing. Enables `.local` mDNS resolution for service discovery (used by flame-auto-discover).
+
+**Run:**
 
 ```bash
 /root/scripts/install-avahi-all-lxcs.sh
 ```
 
+**What it does:**
+- Iterates all LXC containers on the host
+- Skips stopped containers and containers without apt-get
+- Checks if `avahi-daemon` is installed in each running LXC
+- Installs and enables the service if missing
+- Sends a summary notification via Telegram and/or Gotify
+
+**Cron (weekly):**
+
+```bash
+crontab -e
+# Add:
+0 3 * * 0 /root/scripts/install-avahi-all-lxcs.sh >> /var/log/avahi-install.log 2>&1
+```
+
+**Example output:**
+
+```
+2026-08-25 14:30:01 [INFO] Starting avahi-daemon check on pve01...
+2026-08-25 14:30:01 [INFO] Checking LXC 101 (authentik)...
+2026-08-25 14:30:03 [INFO] ID 101 (authentik): avahi-daemon already installed
+2026-08-25 14:30:03 [INFO] Checking LXC 102 (database)...
+2026-08-25 14:30:05 [INFO] ID 102 (database): avahi-daemon installed and started
+2026-08-25 14:30:05 [INFO] ID 103 (alpine-box): No apt-get found
+2026-08-25 14:30:05 [INFO] ID 104 (old-test): Stopped — skipping
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Summary
+   Installed:         1
+   Already present:   1
+   Skipped (stopped): 1
+   Skipped (no apt):  1
+   Failed:            0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+---
+
 ### netdata-postinstall.sh
 
-Run on the **Proxmox host** after installing Netdata (e.g. via community-scripts):
+Configure Netdata on the PVE host to monitor LXC containers via cgroups v2.
+
+**Run:**
 
 ```bash
 /root/scripts/netdata-postinstall.sh
@@ -178,7 +257,12 @@ Run on the **Proxmox host** after installing Netdata (e.g. via community-scripts
 - Configures cgroup-name helper for VMID-to-name resolution
 - Restarts Netdata and verifies container discovery
 
+**Why is this needed?**
+
+Proxmox 8+ uses cgroups v2 with containers at `/sys/fs/cgroup/lxc/<vmid>/`. Netdata's default config excludes `/lxc` entirely, so LXC containers don't appear in the dashboard. This script fixes that.
+
 **Example output:**
+
 ```
 2026-08-25 19:10:01 [INFO] Detected cgroups version: v2
 2026-08-25 19:10:01 [INFO] Added netdata user to www-data group
@@ -190,48 +274,11 @@ Run on the **Proxmox host** after installing Netdata (e.g. via community-scripts
 2026-08-25 19:10:32 [INFO] Access Netdata at: http://192.168.1.238:19999
 ```
 
-**Why is this needed?**
-Proxmox 8+ uses cgroups v2 with containers at `/sys/fs/cgroup/lxc/<vmid>/`. Netdata's default config excludes `/lxc` entirely, so LXC containers don't appear in the dashboard. This script fixes that.
-
-### Weekly crontab
-
-Add a crontab entry to check all LXCs every Sunday at 3 AM:
-
-```bash
-crontab -e
-# Add this line:
-0 3 * * 0 /root/scripts/install-avahi-all-lxcs.sh >> /var/log/avahi-install.log 2>&1
-```
-
-**What it does:**
-- Iterates all LXC containers on the host
-- Skips stopped containers and containers without apt-get
-- Checks if `avahi-daemon` is installed in each running LXC
-- Installs and enables the service if missing
-- Sends a summary notification via Telegram and/or Gotify
-
-**Example output:**
-```
-2026-08-25 14:30:01 [INFO] ℹ️ Starting avahi-daemon check on pve01...
-2026-08-25 14:30:01 [INFO] ℹ️ Checking LXC 101 (authentik)...
-2026-08-25 14:30:03 [INFO] ✅ ID 101 (authentik): avahi-daemon already installed
-2026-08-25 14:30:03 [INFO] ℹ️ Checking LXC 102 (database)...
-2026-08-25 14:30:05 [INFO] ✅ ID 102 (database): avahi-daemon installed and started
-2026-08-25 14:30:05 [INFO] ⏭️ ID 103 (alpine-box): No apt-get found
-2026-08-25 14:30:05 [INFO] ⏭️ ID 104 (old-test): Stopped — skipping
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 Summary
-   Installed:         1
-   Already present:   1
-   Skipped (stopped): 1
-   Skipped (no apt):  1
-   Failed:            0
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
+---
 
 ## Security
 
-- Config files with secrets (`telegram.conf`, `gotify.conf`) are **gitignored**
+- Config files with secrets (`telegram.conf`, `gotify.conf`, `flame-auto-discover.conf`) are **gitignored**
 - Config files must have `600` ownership `root:root` permissions to be loaded — the script refuses to load insecure files
 - No secrets are ever printed to the terminal or included in notifications
 
