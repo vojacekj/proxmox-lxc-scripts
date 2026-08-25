@@ -7,6 +7,7 @@ Helper scripts for managing Proxmox VE LXC containers with **Telegram** and **Go
 | Script | Description |
 |--------|-------------|
 | `install-avahi-all-lxcs.sh` | Check all running LXCs for `avahi-daemon` and install it if missing |
+| `netdata-postinstall.sh` | Configure Netdata on PVE host to monitor LXC containers via cgroups v2 |
 
 ## Installation
 
@@ -24,11 +25,14 @@ Or download scripts and configs individually:
 mkdir -p /root/scripts
 wget -O /root/scripts/install-avahi-all-lxcs.sh \
   https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/install-avahi-all-lxcs.sh
+wget -O /root/scripts/netdata-postinstall.sh \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/netdata-postinstall.sh
 wget -O /root/scripts/telegram.conf.example \
   https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/telegram.conf.example
 wget -O /root/scripts/gotify.conf.example \
   https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/gotify.conf.example
 chmod +x /root/scripts/install-avahi-all-lxcs.sh
+chmod +x /root/scripts/netdata-postinstall.sh
 ```
 
 ## Notification Setup
@@ -74,6 +78,37 @@ Run on the **Proxmox host** (not inside an LXC):
 ```bash
 /root/scripts/install-avahi-all-lxcs.sh
 ```
+
+### netdata-postinstall.sh
+
+Run on the **Proxmox host** after installing Netdata (e.g. via community-scripts):
+
+```bash
+/root/scripts/netdata-postinstall.sh
+```
+
+**What it does:**
+- Detects cgroups v2 (unified hierarchy) on the Proxmox host
+- Adds `netdata` user to `www-data` group for `/etc/pve` access
+- Creates drop-in config at `/etc/netdata/netdata.conf.d/proxmox-cgroups-v2.conf`
+- Overrides Netdata's default cgroup exclusion patterns to enable `/lxc/<vmid>/` paths
+- Configures cgroup-name helper for VMID-to-name resolution
+- Restarts Netdata and verifies container discovery
+
+**Example output:**
+```
+2026-08-25 19:10:01 [INFO] Detected cgroups version: v2
+2026-08-25 19:10:01 [INFO] Added netdata user to www-data group
+2026-08-25 19:10:01 [INFO] Found 11 LXC container configurations in /etc/pve/lxc/
+2026-08-25 19:10:01 [INFO] Created drop-in configuration: /etc/netdata/netdata.conf.d/proxmox-cgroups-v2.conf
+2026-08-25 19:10:02 [INFO] Restarting Netdata...
+2026-08-25 19:10:02 [INFO] Netdata restarted successfully
+2026-08-25 19:10:32 [INFO] === Post-Install Complete ===
+2026-08-25 19:10:32 [INFO] Access Netdata at: http://192.168.1.238:19999
+```
+
+**Why is this needed?**
+Proxmox 8+ uses cgroups v2 with containers at `/sys/fs/cgroup/lxc/<vmid>/`. Netdata's default config excludes `/lxc` entirely, so LXC containers don't appear in the dashboard. This script fixes that.
 
 ### Weekly crontab
 
