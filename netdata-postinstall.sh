@@ -24,7 +24,7 @@
 
 set -Eeuo pipefail
 
-SCRIPT_VERSION="v1.0.0"
+SCRIPT_VERSION="v1.0.1"
 
 # --- LOGGING ---
 LOG_STDOUT="${LOG_STDOUT:-yes}"
@@ -116,12 +116,36 @@ verify_pve_access() {
   fi
 
   local container_count
-  container_count=$(find /etc/pve/lxc -name "*.conf" 2>/dev/null | wc -l)
+  container_count=$(ls /etc/pve/lxc/*.conf 2>/dev/null | wc -l)
   log INFO "Found $container_count LXC container configurations in /etc/pve/lxc/"
   return 0
 }
 
 verify_pve_access
+
+# --- CHECK IF CONTAINERS ARE ALREADY DETECTED ---
+# Count active LXC cgroup directories (works on cgroups v2 without pmxcfs)
+count_lxc_cgroups() {
+  ls -d /sys/fs/cgroup/lxc/*/ 2>/dev/null | wc -l
+}
+
+CONTAINERS_BEFORE=$(count_lxc_cgroups)
+log INFO "Active LXC cgroup directories detected: $CONTAINERS_BEFORE"
+
+if [[ "$CONTAINERS_BEFORE" -gt 0 ]]; then
+  log INFO "LXC containers are already visible in cgroups."
+  log INFO "Netdata may already be monitoring them without additional configuration."
+  log INFO ""
+  log INFO "To verify, check the Netdata dashboard for a 'Containers' section."
+  log INFO "If containers are already showing, the drop-in config may not be needed."
+  log INFO ""
+  read -r -p "Apply cgroups v2 config anyway? (y/N): " apply_config
+  if [[ ! "$apply_config" =~ ^[Yy]$ ]]; then
+    log INFO "Skipping config change. Containers should already be visible."
+    log INFO "If not visible, re-run this script and answer 'y'."
+    exit 0
+  fi
+fi
 
 # --- CREATE DROP-IN CONFIGURATION ---
 NETDATA_CONF_DIR="/etc/netdata/netdata.conf.d"
@@ -200,9 +224,17 @@ if [[ -n "$JOURNAL_OUTPUT" ]]; then
   done
 fi
 
-# --- SUMMARY ---
+# --- AFTER CHECK ---
+CONTAINERS_AFTER=$(count_lxc_cgroups)
+log INFO ""
 log INFO "=== Post-Install Complete ==="
 log INFO "Cgroup version: $CGROUP_VERSION"
+log INFO "LXC cgroup directories: $CONTAINERS_BEFORE before → $CONTAINERS_AFTER after"
+if [[ "$CONTAINERS_BEFORE" -eq 0 && "$CONTAINERS_AFTER" -gt 0 ]]; then
+  log INFO "Config change enabled container detection"
+elif [[ "$CONTAINERS_BEFORE" -gt 0 ]]; then
+  log INFO "Containers were already detected — config change was optional"
+fi
 log INFO "Drop-in config: $NETDATA_CGROUPS_CONF"
 log INFO "Access Netdata at: http://$(hostname -I | awk '{print $1}'):19999"
 log INFO ""
