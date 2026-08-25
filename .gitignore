@@ -1,6 +1,7 @@
 # Ignore actual configuration files containing real secrets
 telegram.conf
 gotify.conf
+flame-auto-discover.conf
 
 # Editor temp files
 *.swp

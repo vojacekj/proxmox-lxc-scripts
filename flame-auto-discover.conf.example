@@ -1,0 +1,47 @@
+# Flame Auto-Discover Configuration
+# ──────────────────────────────────
+# 1. Copy this file to 'flame-auto-discover.conf' in the same directory as the script.
+# 2. Set secure permissions: chmod 600 flame-auto-discover.conf
+#
+# FLAME_LXC_ID is auto-detected on first run and saved here.
+# You can also set it manually or re-detect with: ./flame-auto-discover.sh --detect
+
+# --- Flame LXC (auto-detected on first run) ---
+FLAME_LXC_ID=""
+
+# --- Port Scanning (for services not in built-in map) ---
+# Comma-separated ports to scan when service is not recognized
+SCAN_PORTS="80,443,8080,8443,3000,5000,8096,8920,9090,8123,7878,8888,9000,9696,5678"
+
+# --- Manual Port Overrides ---
+# Format: "hostname:port" pairs separated by spaces
+# Use for services on non-standard ports not in the built-in map
+#
+# Single override:
+#   PORT_OVERRIDES="myapp:8080"
+#
+# Multiple overrides:
+#   PORT_OVERRIDES="myapp:8080 custom-service:3000 homelab-dashboard:4000"
+#
+# Examples:
+#   PORT_OVERRIDES="custom-app:9090 my-git:3000 media-server:8096"
+PORT_OVERRIDES=""
+
+# --- Manual Icon Overrides ---
+# Format: "hostname:icon_url" pairs separated by spaces
+# Use to override auto-detected icons with custom image URLs
+#
+# Single override:
+#   ICON_OVERRIDES="myapp:https://example.com/myapp-icon.svg"
+#
+# Multiple overrides:
+#   ICON_OVERRIDES="myapp:https://example.com/icon1.png custom-service:https://example.com/icon2.svg"
+#
+# Icon sources that work well:
+#   - selfhst/icons CDN: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/{name}.svg
+#   - GitHub raw: https://raw.githubusercontent.com/user/repo/main/logo.png
+#   - Service favicon: http://service.local:port/favicon.ico
+#
+# Examples:
+#   ICON_OVERRIDES="custom-app:https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/docker.svg my-tool:https://raw.githubusercontent.com/example/logo/main/icon.png"
+ICON_OVERRIDES=""
