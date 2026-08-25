@@ -36,7 +36,26 @@ Both **Telegram** and **Gotify** are supported. If both config files exist, noti
    chmod 600 gotify.conf
    ```
 
-Config is loaded from the script's directory first, then from `/etc/pve-telegram.conf` / `/etc/pve-gotify.conf`.
+Config is loaded from `/root/scripts/` (the script's directory) first, then from `/etc/pve-telegram.conf` / `/etc/pve-gotify.conf`.
+
+## Installation
+
+Clone the repo to `/root/scripts` on your Proxmox host:
+
+```bash
+mkdir -p /root/scripts
+cd /root/scripts
+git clone https://github.com/vojacekj/proxmox-lxc-scripts.git .
+```
+
+Or download a single script directly:
+
+```bash
+mkdir -p /root/scripts
+wget -O /root/scripts/install-avahi-all-lxcs.sh \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/install-avahi-all-lxcs.sh
+chmod +x /root/scripts/install-avahi-all-lxcs.sh
+```
 
 ## Usage
 
@@ -45,9 +64,17 @@ Config is loaded from the script's directory first, then from `/etc/pve-telegram
 Run on the **Proxmox host** (not inside an LXC):
 
 ```bash
-wget https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/install-avahi-all-lxcs.sh
-chmod +x install-avahi-all-lxcs.sh
-./install-avahi-all-lxcs.sh
+/root/scripts/install-avahi-all-lxcs.sh
+```
+
+### Weekly crontab
+
+Add a crontab entry to check all LXCs every Sunday at 3 AM:
+
+```bash
+crontab -e
+# Add this line:
+0 3 * * 0 /root/scripts/install-avahi-all-lxcs.sh >> /var/log/avahi-install.log 2>&1
 ```
 
 **What it does:**
