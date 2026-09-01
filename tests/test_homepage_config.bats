@@ -17,9 +17,11 @@ load test_helper
   [[ "$output" == "sh-home-assistant" ]]
 }
 
-@test "homepage_icon: unknown service falls back to sh-server" {
+@test "homepage_icon: unknown service falls back to selfhst server svg" {
   run homepage_icon "totally-unknown-service-xyz"
-  [[ "$output" == "sh-server" ]]
+  [[ "$output" == "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/server.svg" ]]
+  [[ "$output" != *"sh-server"* ]]
+  [[ "$output" != *".local"* ]]
 }
 
 @test "homepage_icon: uses override URL when ICON_OVERRIDES set" {
@@ -33,9 +35,9 @@ load test_helper
   [[ "$output" == "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/yuvomi.svg" ]]
 }
 
-@test "homepage_icon: custom default for omnitools uses a URL icon" {
+@test "homepage_icon: custom default for omnitools uses its github favicon url" {
   run homepage_icon "omnitools"
-  [[ "$output" == "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/git.png" ]]
+  [[ "$output" == "https://cdn.jsdelivr.net/gh/iib0011/omni-tools@main/public/favicon.svg" ]]
 }
 
 @test "homepage_icon: proxmox-hive uses its github logo url" {
@@ -47,6 +49,13 @@ load test_helper
 @test "homepage_icon: proxmox uses the proxmox.svg logo" {
   run homepage_icon "proxmox"
   [[ "$output" == "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/proxmox.svg" ]]
+}
+
+@test "homepage_icon: never returns a .local icon path" {
+  for name in omnitools yuvomi convertx proxmox-hive proxmox jellyfin unknown-custom-app; do
+    run homepage_icon "$name"
+    [[ "$output" != *".local"* ]]
+  done
 }
 
 # --- homepage_service_yaml ---

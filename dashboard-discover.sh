@@ -598,7 +598,7 @@ EOF
 # Default icons for apps that have no SERVICE_MAP entry / dedicated selfhst
 # slug. Values are Homepage icon values (sh-/di:/mdi-/full URL).
 declare -A CUSTOM_ICON_DEFAULTS=(
-  ["omnitools"]="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/git.png"
+  ["omnitools"]="https://cdn.jsdelivr.net/gh/iib0011/omni-tools@main/public/favicon.svg"
   ["yuvomi"]="https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/yuvomi.svg"
   ["convertx"]="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/convertx.png"
   ["proxmox-hive"]="https://cdn.jsdelivr.net/gh/macokay/proxmox-hive@main/client/public/hive.svg"
@@ -637,7 +637,9 @@ homepage_icon() {
     return 0
   fi
 
-  echo "sh-server"
+  # Generic fallback: selfhst CDN server icon (matches get_icon_url/flame
+  # convention — never a local/favicon path).
+  echo "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/server.svg"
   return 0
 }
 

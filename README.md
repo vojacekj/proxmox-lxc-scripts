@@ -164,7 +164,7 @@ Both Gatus and Homepage reload config automatically — no service restarts requ
 | `ICON_OVERRIDES` | `"hostname:url"` pairs for custom icons (takes precedence over built-in defaults) |
 | `SKIP_APPS` | Comma-separated container names to skip (e.g., `"pve,monitoring"`) |
 
-> **Built-in custom-app icons:** `homepage_icon()` ships fallback icons for `omnitools` (dashboard-icons `git.png`), `yuvomi` (selfhst `yuvomi.svg`), `convertx` (dashboard-icons `convertx.png`), `proxmox-hive` (its GitHub `hive.svg`), and `proxmox` (selfhst `proxmox.svg`). These use full CDN URLs (not `mdi:` shorthand) so they render reliably. Override any of these with `ICON_OVERRIDES`.
+> **Built-in custom-app icons:** `homepage_icon()` ships fallback icons as full CDN URLs — `omnitools` (its GitHub favicon), `yuvomi` (selfhst `yuvomi.svg`), `convertx` (dashboard-icons `convertx.png`), `proxmox-hive` (its GitHub `hive.svg`), and `proxmox` (selfhst `proxmox.svg`). Icons never use `.local` or favicon endpoints (CDN only). Override any of these with `ICON_OVERRIDES`.
 
 **Cron (every 15 minutes):**
 

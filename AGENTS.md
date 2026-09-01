@@ -39,8 +39,9 @@ Proxmox VE helper scripts for LXC container management with Telegram/Gotify noti
 ### Icon Resolution Order
 
 - `get_icon_url()` returns full selfhst CDN URLs (used where a raw URL is needed)
-- `homepage_icon()` returns the `sh-<name>` shorthand used by Homepage; slugs are passed through unchanged (dashes/underscores preserved)
-- `CUSTOM_ICON_DEFAULTS` (assoc array) provides fallback icons for known custom apps (omnitools→git.png, yuvomi, convertx, proxmox-hive→hive.svg, proxmox→proxmox.svg) that have no SERVICE_MAP entry / selfhst slug — checked after overrides, before the generic `sh-server` fallback. Full CDN URLs are used (not `mdi:` shorthand) because Homepage renders them reliably.
+- `homepage_icon()` returns a Homepage icon value: `sh-<name>` shorthand for known services (selfhst CDN slug, dashes/underscores preserved), a full CDN URL for custom apps, or the selfhst `server.svg` CDN fallback
+- `CUSTOM_ICON_DEFAULTS` (assoc array) provides CDN fallback icons for known custom apps (omnitools→its GitHub favicon, yuvomi, convertx, proxmox-hive→its GitHub `hive.svg`, proxmox→proxmox.svg) that have no SERVICE_MAP entry / selfhst slug — checked after overrides, before the generic `server.svg` fallback
+- **Icons never use `.local` or favicon endpoints** — per the established Flame convention (`1efc39d`: "local favicons don't work from inside the app LXC"), all icons come from a CDN
 - Manual `ICON_OVERRIDES` (full URLs) take precedence over both
 
 ### Grouping
@@ -58,7 +59,7 @@ Proxmox VE helper scripts for LXC container management with Telegram/Gotify noti
 - `link_host()` — returns the `name.local` mDNS hostname when `USE_LOCAL_DOMAINS=yes`, else the raw IP; used for browser-facing Homepage `href` links only
 - Gatus monitor `url` targets always use the raw IP (Gatus is a Go binary whose resolver doesn't do mDNS, so `*.local` probes fail); `USE_LOCAL_DOMAINS` does **not** affect Gatus endpoints
 - `homepage_service_yaml()` — one service entry (href, icon). The Gatus widget is attached **only to the `gatus` service card**, since the widget shows Gatus-wide aggregate stats; repeating it on every card duplicates identical numbers.
-- `homepage_icon()` — `sh-` shorthand from SERVICE_MAP
+- `homepage_icon()` — Homepage icon (`sh-` for known services, full CDN URL for custom apps/fallback); never `.local`
 - `pct_push()` — `pct exec mkdir -p` + `pct push` + `chmod` into an LXC
 - `find_lxc_by_name()` — locate a running LXC by name substring or open port
 - Proxmox host service: the PVE host isn't an LXC, so discovery skips it; `homepage` config adds it as a managed service (https on `PVE_HOST_PORT`) when `PVE_HOST_IP` is set (auto-detected from the host's primary interface if blank)
