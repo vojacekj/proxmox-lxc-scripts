@@ -8,9 +8,11 @@ Helper scripts for managing Proxmox VE LXC containers with **Telegram** and **Go
 - [Notification Setup](#notification-setup)
   - [Telegram](#telegram)
   - [Gotify](#gotify)
+- [Architecture](#architecture)
 - [Scripts](#scripts)
-  - [flame-auto-discover.sh](#flame-auto-discoversh)
+  - [dashboard-discover.sh](#dashboard-discoversh)
   - [install-avahi-all-lxcs.sh](#install-avahi-all-lxcsh)
+- [Development](#development)
 - [Security](#security)
 - [License](#license)
 
@@ -18,7 +20,7 @@ Helper scripts for managing Proxmox VE LXC containers with **Telegram** and **Go
 
 | Script | Description |
 |--------|-------------|
-| [`flame-auto-discover.sh`](#flame-auto-discoversh) | Auto-detect running LXC services and add them to a Flame dashboard |
+| [`dashboard-discover.sh`](#dashboard-discoversh) | Auto-detect running LXC web services and render Gatus + Homepage config |
 | [`install-avahi-all-lxcs.sh`](#install-avahi-all-lxcsh) | Check all running LXCs for `avahi-daemon` and install it if missing |
 
 ## Installation
@@ -69,71 +71,89 @@ Config is loaded from `/root/scripts/` (the script's directory) first, then from
 
 ---
 
-## flame-auto-discover.sh
+## Architecture
 
-Auto-detect running LXC containers and add them to your [Flame](https://github.com/pawelmalak/flame) dashboard with `.local` domains and official icons from [selfhst/icons](https://github.com/selfhst/icons).
+`dashboard-discover.sh` feeds a self-hosted monitoring + dashboard stack made of two LXCs (both installable via [community-scripts](https://community-scripts.org)):
+
+| App | LXC install script | Role | Config path | Port |
+|-----|--------------------|------|-------------|------|
+| [Gatus](https://github.com/TwiN/gatus) | `ct/gatus.sh` | Probes services (HTTP/TCP), uptime history, alerting | `/opt/gatus/config` | 8080 |
+| [Homepage](https://gethomepage.dev) | `ct/homepage.sh` | Start page: icons + links + per-service Gatus status widgets | `/opt/homepage/config` | 3000 |
+
+Flow:
+
+1. `dashboard-discover.sh` scans running LXCs, detects web services and ports (built-in map → community-scripts GitHub → port scan).
+2. It renders **Gatus endpoint config** (one service = one HTTP/TCP check, grouped, with alerting) and **Homepage `services.yaml`** (icons + links + a `gatus` widget per service).
+3. Files are pushed into each LXC via `pct push`.
+4. **Both apps hot-reload**: Gatus re-reads its config every ~30s; Homepage watches `services.yaml` and updates immediately. No restarts needed.
+
+Using two file-driven apps means everything is fully scriptable — no manual monitor creation.
+
+---
+
+## dashboard-discover.sh
+
+Auto-detect running LXC containers and generate config for **Gatus** (health checks) and **Homepage** (dashboard) with `.local`/IP links and icons from [selfhst/icons](https://github.com/selfhst/icons).
 
 **Download:**
 
 ```bash
 cd /root/scripts
-wget -O flame-auto-discover.sh \
-  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/flame-auto-discover.sh
-wget -O flame-auto-discover.conf.example \
-  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/flame-auto-discover.conf.example
-chmod +x flame-auto-discover.sh
+wget -O dashboard-discover.sh \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/dashboard-discover.sh
+wget -O dashboard-discover.conf.example \
+  https://raw.githubusercontent.com/vojacekj/proxmox-lxc-scripts/main/dashboard-discover.conf.example
+chmod +x dashboard-discover.sh
 ```
 
 **Setup:**
 
 ```bash
-cp flame-auto-discover.conf.example flame-auto-discover.conf
-chmod 600 flame-auto-discover.conf
+cp dashboard-discover.conf.example dashboard-discover.conf
+chmod 600 dashboard-discover.conf
 ```
 
 **Run:**
 
 ```bash
-/root/scripts/flame-auto-discover.sh
+/root/scripts/dashboard-discover.sh
 ```
 
 **What it does:**
-- Auto-detects your Flame LXC container (by name or port 5005)
+- Auto-detects your Gatus and Homepage LXCs (by name, or by port scan)
 - Scans all running LXC containers for web services
 - Matches services against a built-in map of 80+ common homelab apps
-- Queries [community-scripts](https://github.com/community-scripts/ProxmoxVE) GitHub for unrecognized services (cached 7 days)
-- Falls back to port scanning if still unknown
-- Fetches icons from [selfhst/icons](https://github.com/selfhst/icons) CDN
-- Adds services to Flame as `{name}.local:{port}` (pinned, public)
-- Directly modifies Flame's SQLite database via `pct exec` (no auth needed)
-- Auto-installs `sqlite3` in Flame LXC if missing
-- Sends notification summary with service names via Telegram/Gotify
+- Falls back to port scanning if the service isn't in the map
+- Renders Gatus endpoints (HTTP/TCP checks, grouped by category, with alerting)
+- Renders Homepage `services.yaml` (icons, links, per-service `gatus` status widget)
+- Pushes config into each LXC via `pct push`
+- Sends a notification summary via Telegram/Gotify
+
+Both Gatus and Homepage reload config automatically — no service restarts required.
 
 **Options:**
 
 | Flag | Description |
 |------|-------------|
-| `--dry-run` | Show what would be added without making changes |
-| `--restart` | Restart Flame service after adding new apps |
-| `--detect` | Re-detect Flame LXC container |
+| `--dry-run` | Show what would be written without pushing files |
+| `--detect` | Re-detect the Gatus/Homepage LXC containers |
 | `--help` | Show help message |
-
-**First run:**
-
-```bash
-# Auto-detects Flame and saves LXC ID to config
-/root/scripts/flame-auto-discover.sh
-
-# You'll be prompted to confirm the detected container
-# Found Flame at LXC 103 (flame)
-# Use this Flame container? [Y/n]
-```
 
 **Configuration:**
 
 | Option | Description |
 |--------|-------------|
-| `FLAME_LXC_ID` | Auto-detected on first run, or set manually |
+| `GATUS_ENABLED` | Set to `no` to skip Gatus config generation |
+| `GATUS_LXC_ID` | Auto-detected on first run, or set manually |
+| `GATUS_CONFIG_DIR` | Config dir inside Gatus LXC (default `/opt/gatus/config`) |
+| `GATUS_SCAN_INTERVAL` | Seconds between checks per service (default `60`) |
+| `GATUS_ALERTING` | `yes` to emit alerting blocks from `telegram.conf`/`gotify.conf` |
+| `GATUS_RESTART_SERVICE` | `yes` to restart Gatus after pushing (default `no` — avoids restart churn) |
+| `HOMEPAGE_ENABLED` | Set to `no` to skip Homepage config generation |
+| `HOMEPAGE_LXC_ID` | Auto-detected on first run, or set manually |
+| `HOMEPAGE_CONFIG_DIR` | Config dir inside Homepage LXC (default `/opt/homepage/config`) |
+| `HOMEPAGE_SERVICES_FILE` | Filename to write (default `services.yaml`) |
+| `HOMEPAGE_GATUS_URL` | Base URL Homepage uses for the Gatus widget (auto-detected; override to use a hostname) |
 | `SCAN_PORTS` | Comma-separated ports to probe for unknown services |
 | `PORT_OVERRIDES` | `"hostname:port"` pairs for non-standard ports |
 | `ICON_OVERRIDES` | `"hostname:url"` pairs for custom icons |
@@ -144,44 +164,65 @@ chmod 600 flame-auto-discover.conf
 ```bash
 crontab -e
 # Add:
-*/15 * * * * /root/scripts/flame-auto-discover.sh >> /var/log/flame-discover.log 2>&1
+*/15 * * * * /root/scripts/dashboard-discover.sh >> /var/log/dashboard-discover.log 2>&1
 ```
+
+**Gatus monitoring LXC (one-time):**
+
+```bash
+# On the Proxmox host, via community-scripts:
+var_os='debian' bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/gatus.sh)"
+```
+
+**Homepage LXC (one-time):**
+
+```bash
+var_os='debian' bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/homepage.sh)"
+```
+
+**Homepage host validation (required once):**
+
+Homepage v1.0+ blocks requests from any host not listed in `HOMEPAGE_ALLOWED_HOSTS` (you'll see "Host validation failed" at `http://homepage.local:3000`). Set it and restart the service. List the hostname(s)/IP(s) you actually use to reach it (dynamic-IP setups: use your hostname, not a fixed IP — e.g. `homepage.local`, a `.local` name, or your reverse-proxy domain):
+
+```bash
+VMID=105                                   # your Homepage LXC id
+pct exec $VMID -- bash -c "
+  sed -i '/^\[Service\]/a Environment=HOMEPAGE_ALLOWED_HOSTS=homepage.local:3000' /etc/systemd/system/homepage.service
+  systemctl daemon-reload
+  systemctl restart homepage
+"
+```
+
+If the systemd unit already loads `/opt/homepage/.env` via `EnvironmentFile`, append the same value there instead of using `sed`. `localhost:3000` and `127.0.0.1:3000` are always allowed by default.
 
 **Built-in services:** jellyfin, plex, sonarr, radarr, prowlarr, qbittorrent, portainer, grafana, prometheus, pihole, adguard, nextcloud, vaultwarden, paperless, immich, and 60+ more.
 
-**Example output:**
+**Example Gatus output:**
 
-```
-2026-08-25 14:30:01 [INFO] Starting Flame Auto-Discover v2.1.0 on pve01...
-2026-08-25 14:30:01 [INFO] Using Flame LXC: 103
-2026-08-25 14:30:01 [INFO] Scanning for running LXC containers...
-2026-08-25 14:30:01 [INFO] Found 8 running LXC containers.
-2026-08-25 14:30:01 [INFO] Processing LXC 101 (jellyfin)...
-2026-08-25 14:30:01 [INFO]   IP: 10.10.10.101
-2026-08-25 14:30:01 [INFO]   Detected port: 8096
-2026-08-25 14:30:02 [INFO]   Added 'jellyfin' to Flame.
-2026-08-25 14:30:02 [INFO] Processing LXC 102 (pihole)...
-2026-08-25 14:30:02 [INFO]   Added 'pihole' to Flame.
-2026-08-25 14:30:02 [INFO] Processing LXC 105 (nexterm)...
-2026-08-25 14:30:02 [INFO]   Not in built-in map, checking community-scripts...
-2026-08-25 14:30:03 [INFO]   Found in community-scripts: port 6989
-2026-08-25 14:30:03 [INFO]   Added 'nexterm' to Flame.
-2026-08-25 14:30:03 [INFO] Processing LXC 104 (database)...
-2026-08-25 14:30:03 [INFO]   No web service detected on database — skipping.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Summary
-   Added:           3
-   Already existed: 0
-   No web service:  1
-   Failed:          0
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```yaml
+metrics: true
+storage:
+  type: sqlite
+  path: /opt/gatus/data.db
+alerting:
+  telegram:
+    token: 123:ABC
+    id: chat-1
+interval: 60
+endpoints:
+  - name: jellyfin
+    group: media
+    url: http://10.10.10.101:8096
+    interval: 60s
+    conditions:
+      - [CONNECTED] == true
 ```
 
 ---
 
 ## install-avahi-all-lxcs.sh
 
-Check all running LXC containers for `avahi-daemon` and install it if missing. Enables `.local` mDNS resolution for service discovery (used by flame-auto-discover).
+Check all running LXC containers for `avahi-daemon` and install it if missing. Enables `.local` mDNS resolution for service discovery (used by dashboard-discover).
 
 **Download:**
 
@@ -235,9 +276,31 @@ Summary
 
 ---
 
+## Development
+
+Automated checks (ShellCheck + bats tests) run in GitHub Actions on every push/PR.
+
+**Local checks:**
+
+| Command | What it does |
+|---------|--------------|
+| `make lint` | ShellCheck on both scripts |
+| `make test` | Runs bats unit tests |
+| `make check` | Syntax check + lint + tests (same as CI) |
+
+**Tests** (`tests/`) use [bats-core](https://github.com/bats-core/bats-core) and cover the pure-logic functions of `dashboard-discover.sh`: URL normalization, service lookup, grouping/icon helpers, Gatus/Homepage YAML builders, argument parsing, and the `SKIP_APPS` logic. They mock nothing external and require no Proxmox host.
+
+Requirements:
+
+- [bats-core](https://github.com/bats-core/bats-core) on `PATH` (`brew install bats-core` on macOS)
+- [ShellCheck](https://github.com/koalaman/shellcheck) (`brew install shellcheck` on macOS, `apt install shellcheck` on Debian)
+- **bash 4+** — the scripts use associative arrays. macOS ships bash 3.2; install with `brew install bash`. `make test` auto-detects Homebrew bash.
+
+---
+
 ## Security
 
-- Config files with secrets (`telegram.conf`, `gotify.conf`, `flame-auto-discover.conf`) are **gitignored**
+- Config files with secrets (`telegram.conf`, `gotify.conf`, `dashboard-discover.conf`) are **gitignored**
 - Config files must have `600` ownership `root:root` permissions to be loaded — the script refuses to load insecure files
 - No secrets are ever printed to the terminal or included in notifications
 

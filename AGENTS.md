@@ -4,108 +4,128 @@ Instructions for AI coding assistants working on this repository.
 
 ## Repository Overview
 
-Proxmox VE helper scripts for LXC container management with Telegram/Gotify notifications. All scripts run on the Proxmox host as root.
+Proxmox VE helper scripts for LXC container management with Telegram/Gotify notifications. `dashboard-discover.sh` feeds a self-hosted monitoring stack (Gatus + Homepage) running as LXCs on the same Proxmox host. All scripts run on the Proxmox host as root.
 
 ## Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `flame-auto-discover.sh` | Auto-detect LXC services, add to Flame dashboard |
+| `dashboard-discover.sh` | Auto-detect LXC web services, generate Gatus + Homepage config |
 | `install-avahi-all-lxcs.sh` | Install avahi-daemon in all running LXCs |
 
-## flame-auto-discover.sh
+## dashboard-discover.sh
 
 ### Architecture
 
-- Runs on Proxmox host, uses `pct exec` to interact with LXC containers
-- Directly modifies Flame's SQLite database via `pct exec $LXC_ID -- sqlite3`
-- No Flame authentication needed (direct DB access)
-- Auto-detects Flame LXC by container name "flame" or port 5005 scan
-- Saves `FLAME_LXC_ID` to config file after first successful detection
+- Runs on Proxmox host, uses `pct` to inspect LXCs
+- Does **not** use a database — it writes YAML config files that Gatus and Homepage hot-reload
+- Auto-detects the Gatus and Homepage LXC by container name (falls back to port scan: Gatus `8080`, Homepage `3000`)
+- Pushes generated config files into the target LXC via `pct push`
+- No auth tokens needed (both apps reload config from disk)
+
+### Stack
+
+- **Gatus** (LXC, `ct/gatus.sh` install): prober. Config at `/opt/gatus/config`, port `8080`, watch-logic: re-reads config every ~30s, hot-reloads, builds a Go binary and `setcap CAP_NET_RAW+ep` (ICMP/ping checks work).
+- **Homepage** (LXC, `ct/homepage.sh` install): start page. Config at `/opt/homepage/config`, port `3000`, hot-reloads on YAML file change (no restart for `services.yaml`). Requires `HOMEPAGE_ALLOWED_HOSTS` in `/etc/systemd/system/homepage.service` (or `/opt/homepage/.env` if the unit uses `EnvironmentFile`) or Homepage v1.0+ refuses connections with "Host validation failed". Documented in README.
 
 ### Port Resolution Order
 
 1. Manual overrides (`PORT_OVERRIDES` in config)
 2. Hardcoded `SERVICE_MAP` associative array (~80 services)
-3. On-demand query to community-scripts GitHub API (cached 7 days in `/tmp`)
-4. Port scanning via `nc -zw2` on common ports
+3. Port scanning via `nc -zw2` on common ports
+
+(Note: the older Flame script queried community-scripts GitHub on demand; that was dropped when Flame support was removed. No network lookup is done at runtime now.)
 
 ### Icon Resolution Order
 
-1. Manual overrides (`ICON_OVERRIDES` in config)
-2. `selfhst/icons` CDN via service map lookup
-3. Generic `server.svg` fallback (no favicon — Flame can't reach local network)
+- `get_icon_url()` returns full selfhst CDN URLs (used where a raw URL is needed)
+- `homepage_icon()` returns the `sh-<name>` shorthand used by Homepage (dashes → underscores)
+- Manual `ICON_OVERRIDES` (full URLs) take precedence for both
+
+### Grouping
+
+- `CATEGORY_MAP` is a `|`-separated list of `group:member,member,...`; groups mirror the `SERVICE_MAP` section headers
+- `get_service_group()` (in `get_service_group`) maps a hostname to a group for Gatus `group:` and Homepage sections; unmatched → `default`/`other`
+- `SERVICE_MAP` and `CATEGORY_MAP` must be kept in sync
 
 ### Key Functions
 
-- `detect_flame_lxc()` — Find Flame container, validate DB, prompt user
-- `validate_flame_db()` — Check DB exists, install sqlite3 if missing, verify `apps` table
-- `flame_insert_app()` — INSERT INTO apps with isPinned=1, isPublic=1
-- `fetch_port_from_community_scripts()` — Query GitHub raw URL, parse port from script output
-- `normalize_url()` — Strip trailing slashes and default ports for dedup
-- `flame_url_exists()` / `flame_name_exists()` — Case-insensitive dedup
+- `get_lxc_ip()` — resolve an LXC IP from static config, mDNS, or /etc/hosts
+- `scan_web_port()` — `nc -zw2` probe across `SCAN_PORTS`
+- `gatus_config_header()` — metrics + sqlite storage + auto `alerting:` block from Telegram/Gotify creds + `interval` + an `endpoints:` placeholder
+- `gatus_endpoint_yaml()` — one HTTP/TCP check (name, group, url, conditions, alerts)
+- `homepage_service_yaml()` — one service entry (href, icon, gatus widget)
+- `homepage_icon()` — `sh-` shorthand from SERVICE_MAP
+- `pct_push()` — `pct exec mkdir -p` + `pct push` + `chmod` into an LXC
+- `find_lxc_by_name()` — locate a running LXC by name substring or open port
 
 ### Skip Behavior
 
-- `SKIP_APPS` config variable controls which containers are excluded
-- Format: comma-separated container names, case-insensitive (e.g., `"pve,monitoring"`)
+- `SKIP_APPS` controls excluded containers; comma-separated, case-insensitive
 - Checked after name normalization: `[[ ",${SKIP_APPS}," == *",${name_lower},"* ]]`
-- All LXCs processed by default (no built-in skip list)
-- Flame itself is included in the list — not skipped
 
 ### Config File
 
-`flame-auto-discover.conf` (permissions: 600, root:root required)
+`dashboard-discover.conf` (permissions: 600, root:root required)
 
 ```
-FLAME_LXC_ID="108"
+GATUS_ENABLED="yes"
+GATUS_LXC_ID="101"
+GATUS_CONFIG_DIR="/opt/gatus/config"
+GATUS_SCAN_INTERVAL="60"
+GATUS_ALERTING="yes"
+GATUS_RESTART_SERVICE="no"
+HOMEPAGE_ENABLED="yes"
+HOMEPAGE_LXC_ID="102"
+HOMEPAGE_CONFIG_DIR="/opt/homepage/config"
+HOMEPAGE_SERVICES_FILE="services.yaml"
+HOMEPAGE_GATUS_URL=""
 SCAN_PORTS="80,443,8080,..."
 PORT_OVERRIDES="myapp:8080 custom:3000"
 ICON_OVERRIDES="myapp:https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/docker.svg"
 SKIP_APPS="pve,monitoring"
 ```
 
-- `SKIP_APPS`: Comma-separated container names to exclude from auto-discovery
-- All LXCs are now processed by default (including Flame itself)
-
-### Notification Format
-
-Notifications include counts and service names:
-```
-*Flame Auto-Discover: pve01.local*
-
-Added: 3
-jellyfin, pihole, nexterm
-Already existed: 2
-portainer, gotify
-No web service: 1
-Failed: 0
-```
-
 ### Dependencies
 
-- Host: `curl`, `jq`, `nc` (netcat-openbsd), `pct`, `sqlite3`
-- Flame LXC: `sqlite3` (auto-installed if missing)
+- Host: `curl`, `pct`, `nc` (netcat-openbsd)
+- Gatus LXC: nothing extra (binary + systemd from ct/gatus.sh)
+- Homepage LXC: nothing extra (from ct/homepage.sh)
 
 ### Testing
 
-- `bash -n flame-auto-discover.sh` — syntax check
-- `./flame-auto-discover.sh --dry-run` — preview without changes
-- `./flame-auto-discover.sh --detect` — re-detect Flame LXC
+Automated checks (shellcheck + bats) run in CI on every push/PR via `.github/workflows/ci.yml`. Run them locally with:
+
+- `make lint` — run ShellCheck on both scripts (`shellcheck --severity=warning`)
+- `make test` — run bats unit tests (`BASH=<bash5> bats tests/`)
+- `make check` — syntax check + lint + tests (same as CI)
+
+Manual checks (require a live Proxmox host):
+- `./dashboard-discover.sh --dry-run` — preview without pushing files
+- `./dashboard-discover.sh --detect` — re-detect Gatus/Homepage LXC
+
+#### Test architecture
+
+- `tests/` uses [bats-core](https://github.com/bats-core/bats-core), one file per module
+- `tests/test_helper.bash` generates a "testable extract" of `dashboard-discover.sh`: it pulls in the global defaults, the `SERVICE_MAP` array, `CATEGORY_MAP`, and the pure functions (`normalize_url`, `lookup_service`, `get_icon_url`, `get_port_override`, `get_service_group`, `homepage_icon`, `gatus_config_header`, `gatus_endpoint_yaml`, `homepage_service_yaml`, `parse_args`)
+- **`declare -A` associative arrays don't propagate into the subshells bats `run` uses** — the helper rewrites the map with `declare -gxA` (bash 5.1+) so it's exported and visible
+- bash 3.2 (macOS default) can't run the tests; use Homebrew bash (`brew install bash`, then `make test` auto-detects it). CI (Ubuntu) has bash 5.x
+- Tests run without Proxmox or any LXC — all functions tested are pure logic
 
 ## Code Conventions
 
-- All scripts use `#!/bin/bash` with `set -e` equivalent via `catch_errors`
+- All scripts use `#!/bin/bash`
 - Logging via `log LEVEL message` function (writes to stderr and syslog)
 - Config loaded from script dir first, then `/etc/pve-*.conf`
 - Config files must be 600 root:root — script refuses to load insecure files
 - Notifications sent to both Telegram and Gotify if both configured
 - No secrets printed to terminal or included in notifications
-- SQL strings escaped with single quote doubling: `'` → `''`
+- Generated YAML must use correct indentation for the target app (Homepage: groups col 0, services 4, props 8; Gatus: endpoints under `endpoints:`)
 
 ## Git Conventions
 
 - Commit messages: imperative mood, lowercase, no period
 - Config files (`*.conf`) are gitignored, only `*.conf.example` committed
-- Run `bash -n` syntax check before committing shell scripts
+- Run `make check` (or at least `bash -n` + `shellcheck`) before committing shell scripts
 - **Always update README.md and AGENTS.md** when making changes to script behavior, config options, or functions
+- When adding/removing services, `SERVICE_MAP`/`CATEGORY_MAP` entries or helper functions, keep `tests/` in sync
