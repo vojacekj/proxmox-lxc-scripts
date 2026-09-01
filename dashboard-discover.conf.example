@@ -1,6 +1,10 @@
 # Dashboard Auto-Discover Configuration
 # Copy to dashboard-discover.conf and chmod 600 (root:root required).
-# Auto-generated defaults can be left commented out; they are built-in.
+# Almost every value below is optional: the script has built-in defaults for
+# it. You only need to set what you want to change. The GATUS_*/HOMEPAGE_*/
+# dirs/interval/ports and USE_LOCAL_DOMAINS/PVE_HOST_NAME/PVE_HOST_PORT all
+# have sensible defaults baked into the script, so leave them unset unless you
+# must override.
 
 # --- Gatus ---
 # Gatus runs as an LXC (community script ct/gatus.sh). It reloads its config
@@ -28,8 +32,8 @@ HOMEPAGE_ENABLED="yes"
 # it to Gatus/Homepage as a managed service (PVE web UI, https on PVE_HOST_PORT).
 # PVE_HOST_IP is auto-detected from the host's primary interface if left empty.
 # PVE_HOST_IP="192.168.1.10"
-# PVE_HOST_NAME="proxmox"
-# PVE_HOST_PORT="8006"
+# PVE_HOST_NAME="proxmox"          # built-in default; set only to rename
+# PVE_HOST_PORT="8006"             # built-in default; set only to change port
 
 # --- Discovery ---
 # Comma-separated container names to exclude (case-insensitive)
@@ -40,3 +44,7 @@ HOMEPAGE_ENABLED="yes"
 # PORT_OVERRIDES="myapp:8080 custom:3000"
 # Manual icon overrides: "name:url ..." (full URL, or Homepage mdi-/si-/di: shorthand)
 # ICON_OVERRIDES="myapp:https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/docker.svg omnitools:mdi:sitemap"
+
+# --- Manual-config preservation ---
+# Manual services/endpoints you add by hand to the deployed configs are kept on
+# each run ("only add new"). No setting is required.

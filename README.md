@@ -84,7 +84,7 @@ Flow:
 
 1. `dashboard-discover.sh` scans running LXCs, detects web services and ports (built-in map → community-scripts GitHub → port scan).
 2. It renders **Gatus endpoint config** (one service = one HTTP/TCP check, grouped, with alerting) and a **Homepage `services.yaml`** (icons + links, plus a single Gatus uptime widget on the `gatus` card — the widget shows Gatus-wide aggregate stats, so it's not repeated per service).
-3. Files are pushed into each LXC via `pct push`.
+3. Files are pushed into each LXC via `pct push`. Before overwriting, the script **merges** each generated file with the currently deployed one: anything already in the live file is left completely untouched (including manual edits like a custom proxmox href) and only services/endpoints this run discovered but that aren't deployed yet are added — "only add new", like the old Flame tool. Unchanged files stay byte-identical, so Homepage/Gatus don't reload on every cron run.
 4. **Both apps hot-reload**: Gatus re-reads its config every ~30s; Homepage watches `services.yaml` and updates immediately. No restarts needed.
 
 Using two file-driven apps means everything is fully scriptable — no manual monitor creation.

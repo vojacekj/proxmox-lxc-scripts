@@ -728,6 +728,141 @@ EOF
   fi
 }
 
+# --- HOMEPAGE MANUAL-SERVICE PRESERVATION ---
+
+# Print service names (the `    - name:` lines) from a Homepage services.yaml.
+extract_service_names() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  sed -nE 's/^    - ([^:]+):.*/\1/p' "$file"
+}
+
+# --- HOMEPAGE MERGE (only add new; never modify existing) ---
+# The generated Homepage config is merged against the currently deployed one
+# before pushing, like Flame did: anything already present in the live file is
+# left completely untouched, and only services this run discovered but that
+# aren't in the live file yet are added (each under its group). This keeps
+# manual edits and keeps Homepage from reloading on unchanged files.
+#
+# Args: generated_file existing_file  (existing_file may be empty/unset)
+# Stdout: merged YAML.
+#
+# Algorithm:
+#   - names(existing) = service names already deployed.
+#   - names(gen)      = service names this run generated.
+#   - new = names(gen) not in names(existing).
+#   - Base output = the existing file verbatim (if any).
+#   - Insert each new generated block under its group: if that group header
+#     already exists in the base, append the block there; else add a new group.
+merge_homepage_yaml() {
+  local gen="$1"
+  local existing="$2"
+
+  # 1) Deployed file, untouched.
+  [[ -f "$existing" ]] && cat "$existing"
+
+  # 2) Newly-discovered blocks (name not already deployed) under their group.
+  #    Homepage merges same-named groups, so a repeated `- Group:` header just
+  #    groups these appended services together.
+  if [[ -f "$existing" ]]; then
+    local existing_names
+    existing_names=$(extract_service_names "$existing")
+    EX_NAMES="$existing_names" awk '
+      BEGIN {
+        split(ENVIRON["EX_NAMES"], n, "\n")
+        for (i in n) if (n[i] != "") ex[n[i]] = 1
+      }
+      /^[^ ]/ { group = $0; next }
+      /^    - [^:]+:/ {
+        name = $2; sub(/:$/, "", name)
+        keep = !(name in ex)
+        if (keep) {
+          # open this group for appended services (once per generated group)
+          if (group != cur_group) {
+            if (cur_group != "") print ""
+            print group
+            cur_group = group
+          }
+          print
+          block = 1
+        } else {
+          block = 0
+        }
+        next
+      }
+      { if (block) print }
+    ' "$gen" > "${TMPDIR:-/tmp}/home-new.$$"
+    cat "${TMPDIR:-/tmp}/home-new.$$"
+    rm -f "${TMPDIR:-/tmp}/home-new.$$"
+  else
+    # No existing config: use the generated file as-is.
+    cat "$gen"
+  fi
+}
+
+# --- GATUS MERGE (only add new; never modify existing) ---
+# Gatus config is overwritten each run too. Like the Homepage merge (and the
+# old Flame tool), anything already in the live config is left untouched and
+# only endpoint blocks this run discovered but that aren't deployed yet are
+# added under the single `endpoints:` list.
+
+# Print endpoint names (the `  - name:` lines) from a generated Gatus config.
+extract_endpoint_names() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  sed -nE 's/^  - name: *([^ ]+).*/\1/p' "$file"
+}
+
+# Merge a generated Gatus config.yaml with the existing one. $2 may be
+# empty/unset (no existing). Stdout: merged YAML.
+#
+#   - existing endpoints kept verbatim (header + all deployed checks)
+#   - newly-generated endpoint blocks (name not already deployed) spliced in
+#     right under the `endpoints:` line
+merge_gatus_yaml() {
+  local gen="$1"
+  local existing="$2"
+
+  if [[ ! -f "$existing" ]]; then
+    cat "$gen"
+    return 0
+  fi
+
+  local existing_names new_blocks
+  existing_names=$(extract_endpoint_names "$existing")
+  new_blocks="${TMPDIR:-/tmp}/gatus-new.$$"
+  # New blocks = generated endpoint blocks whose name isn't deployed yet.
+  EX_NAMES="$existing_names" awk '
+    BEGIN {
+      split(ENVIRON["EX_NAMES"], n, "\n")
+      for (i in n) if (n[i] != "") ex[n[i]] = 1
+    }
+    /^  - name: / {
+      name = $3
+      block = (name in ex) ? 0 : 1
+      if (block) print
+      next
+    }
+    { if (block) print }
+  ' "$gen" > "$new_blocks"
+
+  # Existing config verbatim; splice new blocks under the `endpoints:` line.
+  NEW_BLOCKS="$new_blocks" awk '
+    BEGIN { inserted = 0 }
+    /^endpoints:/ {
+      print
+      if (!inserted) {
+        while ((getline line < ENVIRON["NEW_BLOCKS"]) > 0) print line
+        inserted = 1
+      }
+      next
+    }
+    { print }
+  ' "$existing"
+
+  rm -f "$new_blocks"
+}
+
 # --- PCT PUSH ---
 # Push a local file into the given LXC, creating parent dir and setting perms.
 pct_push() {
@@ -1005,11 +1140,23 @@ main() {
       gatus_endpoint_yaml "$sname" "$sprotocol" "$sip" "$sport" "$sgroup" >> "$gatus_file"
     done
 
+    # Preserve manual-only endpoint blocks from the live config.
+    local existing_gatus_yaml=""
+    if [[ "$DRY_RUN" != "true" && -n "$GATUS_LXC_ID" ]]; then
+      existing_gatus_yaml=$(mktemp /tmp/gatus-existing.XXXXXX.yaml)
+      if ! pct exec "$GATUS_LXC_ID" -- cat "${GATUS_CONFIG_DIR}/config.yaml" 2>/dev/null > "$existing_gatus_yaml"; then
+        rm -f "$existing_gatus_yaml"
+        existing_gatus_yaml=""
+      fi
+    fi
+    local gatus_merged_file="${TMPDIR:-/tmp}/gatus-final.$$.yaml"
+    merge_gatus_yaml "$gatus_file" "$existing_gatus_yaml" > "$gatus_merged_file"
+
     if [[ "$DRY_RUN" == "true" ]]; then
       log INFO "  [DRY RUN] Would push Gatus config to LXC ${GATUS_LXC_ID}:${GATUS_CONFIG_DIR}/config.yaml"
     else
       if [[ -n "$GATUS_LXC_ID" ]]; then
-        if pct_push "$GATUS_LXC_ID" "$gatus_file" "${GATUS_CONFIG_DIR}/config.yaml"; then
+        if pct_push "$GATUS_LXC_ID" "$gatus_merged_file" "${GATUS_CONFIG_DIR}/config.yaml"; then
           log INFO "  Pushed Gatus config."
           if [[ "$GATUS_RESTART_SERVICE" == "yes" ]]; then
             pct exec "$GATUS_LXC_ID" -- systemctl restart gatus &>/dev/null && log INFO "  Restarted Gatus service."
@@ -1019,7 +1166,7 @@ main() {
         log ERROR "  GATUS_LXC_ID not set; cannot push Gatus config."
       fi
     fi
-    rm -f "$gatus_file"
+    rm -f "$existing_gatus_yaml" "$gatus_file" "$gatus_merged_file"
   fi
 
   # --- Write Homepage config ---
@@ -1053,18 +1200,34 @@ main() {
       done
     done
 
+    # Preserve manual-only service blocks from the live services.yaml
+    # ("only add new", like the old Flame script). Fetch the current file when
+    # possible (not dry-run and LXC known), else merge with nothing.
+    local existing_homepage_yaml=""
+    if [[ "$DRY_RUN" != "true" && -n "$HOMEPAGE_LXC_ID" ]]; then
+      existing_homepage_yaml=$(mktemp /tmp/homepage-existing.XXXXXX.yaml)
+      if ! pct exec "$HOMEPAGE_LXC_ID" -- cat "${HOMEPAGE_CONFIG_DIR}/${HOMEPAGE_SERVICES_FILE}" 2>/dev/null > "$existing_homepage_yaml"; then
+        rm -f "$existing_homepage_yaml"
+        existing_homepage_yaml=""
+      fi
+    fi
+
+    local merged_file="${TMPDIR:-/tmp}/homepage-final.$$.yaml"
+    merge_homepage_yaml "$homepage_file" "$existing_homepage_yaml" > "$merged_file"
+
     if [[ "$DRY_RUN" == "true" ]]; then
       log INFO "  [DRY RUN] Would push Homepage config to LXC ${HOMEPAGE_LXC_ID}:${HOMEPAGE_CONFIG_DIR}/${HOMEPAGE_SERVICES_FILE}"
     else
       if [[ -n "$HOMEPAGE_LXC_ID" ]]; then
-        if pct_push "$HOMEPAGE_LXC_ID" "$homepage_file" "${HOMEPAGE_CONFIG_DIR}/${HOMEPAGE_SERVICES_FILE}"; then
+        if pct_push "$HOMEPAGE_LXC_ID" "$merged_file" "${HOMEPAGE_CONFIG_DIR}/${HOMEPAGE_SERVICES_FILE}"; then
           log INFO "  Pushed Homepage config."
         fi
       else
         log ERROR "  HOMEPAGE_LXC_ID not set; cannot push Homepage config."
       fi
     fi
-    rm -f "$homepage_file"
+
+    rm -f "$existing_homepage_yaml" "$homepage_file" "$merged_file"
   fi
 
   # Summary

@@ -119,3 +119,160 @@ load test_helper
   [ "$status" -eq 1 ]
   [ -z "$output" ]
 }
+
+# --- merge_homepage_yaml (only add new) ---
+
+@test "merge_homepage_yaml: keeps existing verbatim, adds only new service" {
+  local gen exist
+  gen=$(mktemp); exist=$(mktemp)
+  printf '%s\n' \
+    '- Infrastructure:' \
+    '    - proxmox:' \
+    '        href: https://192.168.1.238:8006' \
+    '    - jellyfin:' \
+    '        href: http://192.168.1.210:8096' > "$gen"
+  printf '%s\n' \
+    '- Infrastructure:' \
+    '    - proxmox:' \
+    '        href: https://pve.mydomain.net:8006' \
+    '' \
+    '- Custom:' \
+    '    - mydash:' \
+    '        href: http://192.168.1.50:8080' > "$exist"
+  run merge_homepage_yaml "$gen" "$exist"
+  [[ "$status" -eq 0 ]]
+  # existing proxmox domain edit is KEPT (existing not rewritten)
+  [[ "$output" == *"href: https://pve.mydomain.net:8006"* ]]
+  # manual mydash block + its Custom group preserved
+  [[ "$output" == *"- Custom:"* ]]
+  [[ "$output" == *"href: http://192.168.1.50:8080"* ]]
+  # NEW jellyfin (not in existing) is added, with its name/href
+  [[ "$output" == *"jellyfin:"* ]]
+  [[ "$output" == *"href: http://192.168.1.210:8096"* ]]
+  rm -f "$gen" "$exist"
+}
+
+@test "merge_homepage_yaml: already-present service is not duplicated" {
+  local gen exist
+  gen=$(mktemp); exist=$(mktemp)
+  printf '%s\n' \
+    '- Media:' \
+    '    - jellyfin:' \
+    '        href: http://192.168.1.210:8096' > "$gen"
+  printf '%s\n' \
+    '- Media:' \
+    '    - jellyfin:' \
+    '        href: http://192.168.1.210:8096' > "$exist"
+  run merge_homepage_yaml "$gen" "$exist"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" != *"jellyfin:"*"jellyfin:"* ]]
+  rm -f "$gen" "$exist"
+}
+
+@test "merge_homepage_yaml: no existing file uses generated output" {
+  local gen
+  gen=$(mktemp)
+  printf '%s\n' \
+    '- Media:' \
+    '    - jellyfin:' \
+    '        href: http://192.168.1.210:8096' > "$gen"
+  run merge_homepage_yaml "$gen" ""
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == *"href: http://192.168.1.210:8096"* ]]
+  [[ "$output" != *"- Custom:"* ]]
+  rm -f "$gen"
+}
+
+# --- merge_gatus_yaml (only add new) ---
+
+@test "merge_gatus_yaml: keeps existing verbatim, adds only new endpoint" {
+  local gen exist
+  gen=$(mktemp); exist=$(mktemp)
+  printf '%s\n' \
+    'metrics: true' \
+    'endpoints:' \
+    '  - name: jellyfin' \
+    '    group: media' \
+    '    url: http://192.168.1.210:8096' > "$gen"
+  printf '%s\n' \
+    'metrics: true' \
+    'endpoints:' \
+    '  - name: proxmox' \
+    '    url: https://OLD.example:8006' \
+    '  - name: myprobe' \
+    '    url: https://example.com/healthz' \
+    '    conditions:' \
+    '      - "[STATUS] == 200"' > "$exist"
+  run merge_gatus_yaml "$gen" "$exist"
+  [[ "$status" -eq 0 ]]
+  # existing endpoints + manual block kept verbatim
+  [[ "$output" == *"- name: myprobe"* ]]
+  [[ "$output" == *"url: https://example.com/healthz"* ]]
+  [[ "$output" == *'"[STATUS] == 200"'* ]]
+  [[ "$output" == *"url: https://OLD.example:8006"* ]]
+  # NEW jellyfin added once
+  [[ "$output" == *"- name: jellyfin"* ]]
+  rm -f "$gen" "$exist"
+}
+
+@test "merge_gatus_yaml: identical generated+existing adds nothing" {
+  local gen exist
+  gen=$(mktemp); exist=$(mktemp)
+  printf '%s\n' 'metrics: true' 'endpoints:' '  - name: jellyfin' '    url: http://192.168.1.210:8096' > "$gen"
+  printf '%s\n' 'metrics: true' 'endpoints:' '  - name: jellyfin' '    url: http://192.168.1.210:8096' > "$exist"
+  run merge_gatus_yaml "$gen" "$exist"
+  [[ ${#output} -gt 0 ]]
+  [[ "$output" != *"- name: jellyfin"*"- name: jellyfin"* ]]
+  rm -f "$gen" "$exist"
+}
+
+# Idempotency: once a generated service is in the deployment, a later display
+# run leaves the file byte-identical (no reload churn on cron). We verify run2
+# (existing = run1 output) equals run3 (existing = run2 output).
+@test "merge_homepage_yaml: stable after first merge (no cron churn)" {
+  local gen base
+  gen=$(mktemp); base=$(mktemp)
+  printf '%s\n' \
+    '- Media:' \
+    '    - jellyfin:' \
+    '        href: http://192.168.1.210:8096' \
+    '    - sonarr:' \
+    '        href: http://192.168.1.211:8989' > "$gen"
+  printf '%s\n' \
+    '- Media:' \
+    '    - jellyfin:' \
+    '        href: http://192.168.1.210:8096' > "$base"
+  local a b c
+  a=$(merge_homepage_yaml "$gen" "$base")      # run1
+  local fa; fa=$(mktemp); printf '%s' "$a" > "$fa"
+  b=$(merge_homepage_yaml "$gen" "$fa")        # run2
+  local fb; fb=$(mktemp); printf '%s' "$b" > "$fb"
+  c=$(merge_homepage_yaml "$gen" "$fb")        # run3
+  [[ "$b" == "$c" ]]                           # stable from run2 onward
+  rm -f "$gen" "$base" "$fa" "$fb"
+}
+
+@test "merge_gatus_yaml: stable after first merge (no cron churn)" {
+  local gen base
+  gen=$(mktemp); base=$(mktemp)
+  printf '%s\n' \
+    'metrics: true' \
+    'endpoints:' \
+    '  - name: jellyfin' \
+    '    url: http://192.168.1.210:8096' \
+    '  - name: sonarr' \
+    '    url: http://192.168.1.211:8989' > "$gen"
+  printf '%s\n' \
+    'metrics: true' \
+    'endpoints:' \
+    '  - name: jellyfin' \
+    '    url: http://192.168.1.210:8096' > "$base"
+  local a b c
+  a=$(merge_gatus_yaml "$gen" "$base")         # run1
+  local fa; fa=$(mktemp); printf '%s' "$a" > "$fa"
+  b=$(merge_gatus_yaml "$gen" "$fa")           # run2
+  local fb; fb=$(mktemp); printf '%s' "$b" > "$fb"
+  c=$(merge_gatus_yaml "$gen" "$fb")           # run3
+  [[ "$a" == "$b" ]] && [[ "$b" == "$c" ]]     # stable from run1 for gatus
+  rm -f "$gen" "$base" "$fa" "$fb"
+}
