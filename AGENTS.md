@@ -40,7 +40,7 @@ Proxmox VE helper scripts for LXC container management with Telegram/Gotify noti
 
 - `get_icon_url()` returns full selfhst CDN URLs (used where a raw URL is needed)
 - `homepage_icon()` returns the `sh-<name>` shorthand used by Homepage; slugs are passed through unchanged (dashes/underscores preserved)
-- `CUSTOM_ICON_DEFAULTS` (assoc array) provides fallback icons for known custom apps (omnitools, yuvomi, convertx, proxmox-hive) that have no SERVICE_MAP entry / selfhst slug — checked after overrides, before the generic `sh-server` fallback
+- `CUSTOM_ICON_DEFAULTS` (assoc array) provides fallback icons for known custom apps (omnitools→`mdi:sitemap`, yuvomi, convertx, proxmox-hive→`mdi:hive`) that have no SERVICE_MAP entry / selfhst slug — checked after overrides, before the generic `sh-server` fallback
 - Manual `ICON_OVERRIDES` (full URLs) take precedence over both
 
 ### Grouping
@@ -61,6 +61,7 @@ Proxmox VE helper scripts for LXC container management with Telegram/Gotify noti
 - `homepage_icon()` — `sh-` shorthand from SERVICE_MAP
 - `pct_push()` — `pct exec mkdir -p` + `pct push` + `chmod` into an LXC
 - `find_lxc_by_name()` — locate a running LXC by name substring or open port
+- Proxmox host service: the PVE host isn't an LXC, so discovery skips it; `homepage` config adds it as a managed service (https on `PVE_HOST_PORT`) when `PVE_HOST_IP` is set (auto-detected from the host's primary interface if blank)
 
 ### Skip Behavior
 
@@ -85,6 +86,7 @@ HOMEPAGE_CONFIG_DIR="/opt/homepage/config"
 HOMEPAGE_SERVICES_FILE="services.yaml"
 HOMEPAGE_GATUS_URL=""
 USE_LOCAL_DOMAINS="yes"
+PVE_HOST_IP="192.168.1.10"
 SCAN_PORTS="80,443,8080,..."
 PORT_OVERRIDES="myapp:8080 custom:3000"
 ICON_OVERRIDES="myapp:https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/docker.svg"

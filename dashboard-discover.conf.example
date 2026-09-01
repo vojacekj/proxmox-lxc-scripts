@@ -23,6 +23,14 @@ HOMEPAGE_ENABLED="yes"
 # HOMEPAGE_SERVICES_FILE="services.yaml"
 # USE_LOCAL_DOMAINS="yes"          # yes = link services as name.local (mDNS); no = raw IPs
 
+# --- Proxmox host (PVE) service ---
+# The host isn't an LXC and won't be auto-discovered. Set PVE_HOST_IP to add
+# it to Gatus/Homepage as a managed service (PVE web UI, https on PVE_HOST_PORT).
+# PVE_HOST_IP is auto-detected from the host's primary interface if left empty.
+# PVE_HOST_IP="192.168.1.10"
+# PVE_HOST_NAME="proxmox"
+# PVE_HOST_PORT="8006"
+
 # --- Discovery ---
 # Comma-separated container names to exclude (case-insensitive)
 # SKIP_APPS="pve,monitoring"

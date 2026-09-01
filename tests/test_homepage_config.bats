@@ -38,6 +38,12 @@ load test_helper
   [[ "$output" == "mdi:sitemap" ]]
 }
 
+@test "homepage_icon: proxmox-hive uses neutral mdi icon, not proxmox logo" {
+  run homepage_icon "proxmox-hive"
+  [[ "$output" == "mdi:hive" ]]
+  [[ "$output" != *"proxmox.svg"* ]]
+}
+
 # --- homepage_service_yaml ---
 
 @test "homepage_service_yaml: emits href, icon; no widget for non-gatus" {

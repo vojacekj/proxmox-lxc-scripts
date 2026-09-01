@@ -92,6 +92,13 @@ HOMEPAGE_GATUS_URL=""
 # Gatus still probes the real IP; only the Homepage links switch to hostnames.
 USE_LOCAL_DOMAINS="yes"
 
+# Proxmox host (PVE) as a managed service. The host is NOT an LXC, so it isn't
+# auto-discovered; set PVE_HOST_IP to include it (PVE web UI on https:8006).
+# PVE_HOST_IP is auto-detected from the host's primary interface if unset.
+PVE_HOST_IP=""
+PVE_HOST_NAME="proxmox"
+PVE_HOST_PORT="8006"
+
 if [[ -f "$CONF_FILE" ]]; then
   secure_source "$CONF_FILE"
 elif [[ -f "/etc/pve-dashboard-discover.conf" ]]; then
@@ -594,7 +601,7 @@ declare -A CUSTOM_ICON_DEFAULTS=(
   ["omnitools"]="mdi:sitemap"
   ["yuvomi"]="https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/yuvomi.svg"
   ["convertx"]="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/convertx.png"
-  ["proxmox-hive"]="https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/proxmox.svg"
+  ["proxmox-hive"]="mdi:hive"
 )
 
 homepage_icon() {
@@ -925,6 +932,22 @@ main() {
   done
 
   log INFO "Discovered ${added} web services."
+
+  # Add the Proxmox host itself as a managed service (it's not an LXC, so it
+  # isn't found by the container scan above). PVE web UI runs on https:8006.
+  if [[ -z "$PVE_HOST_IP" ]]; then
+    PVE_HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+  fi
+  if [[ -n "$PVE_HOST_IP" ]]; then
+    if [[ ",${SKIP_APPS}," != *",${PVE_HOST_NAME},"* ]]; then
+      log INFO "Adding Proxmox host (${PVE_HOST_NAME}) at ${PVE_HOST_IP}:${PVE_HOST_PORT}"
+      services+=("${PVE_HOST_NAME}|https|${PVE_HOST_IP}|${PVE_HOST_PORT}|infrastructure")
+      names+=("$PVE_HOST_NAME")
+      ((added++)) || true
+    fi
+  else
+    log WARN "PVE_HOST_IP not set and could not be auto-detected; skipping Proxmox host service."
+  fi
 
   local gatus_file=""
   local homepage_file=""

@@ -156,12 +156,15 @@ Both Gatus and Homepage reload config automatically — no service restarts requ
 | `HOMEPAGE_SERVICES_FILE` | Filename to write (default `services.yaml`) |
 | `HOMEPAGE_GATUS_URL` | Base URL Homepage uses for the Gatus widget (auto-derived as `<gatus>:<GATUS_PORT>`; override to use a custom hostname/path) |
 | `USE_LOCAL_DOMAINS` | `yes` to link Homepage services as `<name>.local` mDNS hostnames (default, matches old Flame behavior); `no` to use raw IPs |
+| `PVE_HOST_IP` | LAN IP of the Proxmox host; when set, the host is added as a managed service (PVE web UI, `https:<PVE_HOST_PORT>`) since it isn't an LXC. Auto-detected from the host's primary interface if empty |
+| `PVE_HOST_NAME` | Display name for the host service (default `proxmox`) |
+| `PVE_HOST_PORT` | Port for the host service (default `8006`) |
 | `SCAN_PORTS` | Comma-separated ports to probe for unknown services |
 | `PORT_OVERRIDES` | `"hostname:port"` pairs for non-standard ports |
 | `ICON_OVERRIDES` | `"hostname:url"` pairs for custom icons (takes precedence over built-in defaults) |
 | `SKIP_APPS` | Comma-separated container names to skip (e.g., `"pve,monitoring"`) |
 
-> **Built-in custom-app icons:** `homepage_icon()` ships fallback icons for `omnitools` (`mdi:sitemap`), `yuvomi` (selfhst `yuvomi.svg`), `convertx` (dashboard-icons `convertx.png`), and `proxmox-hive` (selfhst `proxmox.svg`). Override any of these with `ICON_OVERRIDES`.
+> **Built-in custom-app icons:** `homepage_icon()` ships fallback icons for `omnitools` (`mdi:sitemap`), `yuvomi` (selfhst `yuvomi.svg`), `convertx` (dashboard-icons `convertx.png`), and `proxmox-hive` (`mdi:hive`). Override any of these with `ICON_OVERRIDES`.
 
 **Cron (every 15 minutes):**
 
