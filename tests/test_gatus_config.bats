@@ -89,7 +89,7 @@ load test_helper
   [ "$status" -eq 0 ]
   [[ "$output" == *"name: jellyfin"* ]]
   [[ "$output" == *"group: media"* ]]
-  [[ "$output" == *"url: http://10.0.0.5:8096"* ]]
+  [[ "$output" == *"url: http://jellyfin.local:8096"* ]]
 }
 
 @test "gatus_endpoint_yaml: default group when empty" {
@@ -106,14 +106,20 @@ load test_helper
 
 @test "gatus_endpoint_yaml: omits default port 80" {
   run gatus_endpoint_yaml "pihole" "http" "10.0.0.6" "80" "dns"
-  [[ "$output" == *"url: http://10.0.0.6"* ]]
+  [[ "$output" == *"url: http://pihole.local"* ]]
   [[ "$output" != *":80"* ]]
 }
 
 @test "gatus_endpoint_yaml: omits default port 443" {
   run gatus_endpoint_yaml "nextcloud" "https" "10.0.0.7" "443" "cloud"
-  [[ "$output" == *"url: https://10.0.0.7"* ]]
+  [[ "$output" == *"url: https://nextcloud.local"* ]]
   [[ "$output" != *":443"* ]]
+}
+
+@test "gatus_endpoint_yaml: uses IP url when USE_LOCAL_DOMAINS=no" {
+  export USE_LOCAL_DOMAINS="no"
+  run gatus_endpoint_yaml "jellyfin" "http" "10.0.0.5" "8096" "media"
+  [[ "$output" == *"url: http://10.0.0.5:8096"* ]]
 }
 
 @test "gatus_endpoint_yaml: no alerts block when no creds and alerting disabled" {

@@ -541,7 +541,9 @@ gatus_endpoint_yaml() {
   local port="$4"
   local group="$5"
 
-  local url="${protocol}://${ip}"
+  local host
+  host=$(link_host "$name" "$ip")
+  local url="${protocol}://${host}"
   [[ "$port" != "80" && "$port" != "443" ]] && url="${url}:${port}"
 
   local condition

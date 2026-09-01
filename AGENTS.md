@@ -53,8 +53,8 @@ Proxmox VE helper scripts for LXC container management with Telegram/Gotify noti
 - `get_lxc_ip()` — resolve an LXC IP from static config, mDNS, or /etc/hosts
 - `scan_web_port()` — `nc -zw2` probe across `SCAN_PORTS`
 - `gatus_config_header()` — metrics + sqlite storage + auto `alerting:` block from Telegram/Gotify creds + `interval` + an `endpoints:` placeholder
-- `gatus_endpoint_yaml()` — one HTTP/TCP check (name, group, url, quoted `[CONNECTED]` condition, alerts). The condition value is **quoted** (`- "[CONNECTED] == true"`) because a leading `[` is otherwise parsed as a YAML flow sequence and Gatus exits on config parse error. `alerts:` lists only providers actually configured (telegram only if `TOKEN`+`CHAT_ID`, gotify only if `GOTIFY_SERVER`+`GOTIFY_TOKEN`), since Gatus fails if an endpoint references an undeclared alerting provider.
-- `link_host()` — returns the `name.local` mDNS hostname when `USE_LOCAL_DOMAINS=yes`, else the raw IP; used for Homepage `href` links
+- `gatus_endpoint_yaml()` — one HTTP/TCP check (name, group, url, quoted `[CONNECTED]` condition, alerts). The monitor `url` uses `link_host` (so it's `name.local` under `USE_LOCAL_DOMAINS=yes`, else the raw IP). The condition value is **quoted** (`- "[CONNECTED] == true"`) because a leading `[` is otherwise parsed as a YAML flow sequence and Gatus exits on config parse error. `alerts:` lists only providers actually configured (telegram only if `TOKEN`+`CHAT_ID`, gotify only if `GOTIFY_SERVER`+`GOTIFY_TOKEN`), since Gatus fails if an endpoint references an undeclared alerting provider.
+- `link_host()` — returns the `name.local` mDNS hostname when `USE_LOCAL_DOMAINS=yes`, else the raw IP; used for both Homepage `href` links and Gatus monitor `url` targets
 - `homepage_service_yaml()` — one service entry (href, icon, gatus widget)
 - `homepage_icon()` — `sh-` shorthand from SERVICE_MAP
 - `pct_push()` — `pct exec mkdir -p` + `pct push` + `chmod` into an LXC
