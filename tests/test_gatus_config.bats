@@ -116,6 +116,16 @@ load test_helper
   [[ "$output" != *":443"* ]]
 }
 
+@test "gatus_endpoint_yaml: skipTLSVerify on https endpoint" {
+  run gatus_endpoint_yaml "portainer" "https" "10.0.0.8" "9443" "infrastructure"
+  [[ "$output" == *"skipTLSVerify: true"* ]]
+}
+
+@test "gatus_endpoint_yaml: no skipTLSVerify on http endpoint" {
+  run gatus_endpoint_yaml "jellyfin" "http" "10.0.0.5" "8096" "media"
+  [[ "$output" != *"skipTLSVerify"* ]]
+}
+
 @test "gatus_endpoint_yaml: no alerts block when no creds and alerting disabled" {
   export GATUS_ALERTING="no"
   export TOKEN=""

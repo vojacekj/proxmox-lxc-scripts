@@ -568,6 +568,16 @@ gatus_endpoint_yaml() {
   - name: ${name}
     group: ${group:-default}
     url: ${url}
+EOF
+  # HTTPS endpoints (e.g. Portainer behind a self-signed cert) would fail TLS
+  # validation by default; skip cert verification so the `[CONNECTED]` check
+  # succeeds the way a browser tolerating the cert would.
+  if [[ "$protocol" == "https" ]]; then
+    cat <<EOF
+    skipTLSVerify: true
+EOF
+  fi
+  cat <<EOF
     interval: 60s
     conditions:
       - ${condition}
