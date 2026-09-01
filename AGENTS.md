@@ -34,15 +34,16 @@ Proxmox VE helper scripts for LXC container management with Telegram/Gotify noti
 2. Hardcoded `SERVICE_MAP` associative array (~80 services)
 3. Port scanning via `nc -zw2` on common ports
 
-(Note: the older Flame script queried community-scripts GitHub on demand; that was dropped when Flame support was removed. No network lookup is done at runtime now.)
+(Note: the older Flame script queried community-scripts GitHub on demand for ports; that port lookup was dropped when Flame support was removed. An on-demand community-scripts **icon** lookup was reintroduced for logos — `fetch_icon_from_community_scripts()`.)
 
 ### Icon Resolution Order
 
 - `get_icon_url()` returns full selfhst CDN URLs (used where a raw URL is needed)
-- `homepage_icon()` returns a Homepage icon value: `sh-<name>` shorthand for known services (selfhst CDN slug, dashes/underscores preserved), a full CDN URL for custom apps, or the selfhst `server.svg` CDN fallback
-- `CUSTOM_ICON_DEFAULTS` (assoc array) provides CDN fallback icons for known custom apps (omnitools→its GitHub favicon, yuvomi, convertx, proxmox-hive→its GitHub `hive.svg`, proxmox→proxmox.svg) that have no SERVICE_MAP entry / selfhst slug — checked after overrides, before the generic `server.svg` fallback
-- **Icons never use `.local` or favicon endpoints** — per the established Flame convention (`1efc39d`: "local favicons don't work from inside the app LXC"), all icons come from a CDN
-- Manual `ICON_OVERRIDES` (full URLs) take precedence over both
+- `homepage_icon()` returns a Homepage icon value: `sh-<name>` shorthand for known services (selfhst CDN slug, dashes/underscores preserved), a full CDN URL for custom apps, an on-demand community-scripts logo, or the selfhst `server.svg` CDN fallback
+- `CUSTOM_ICON_DEFAULTS` (assoc array) provides CDN fallback icons for known custom apps (omnitools, yuvomi, convertx, proxmox-hive, proxmox) that have no SERVICE_MAP entry / selfhst slug — checked after overrides
+- `fetch_icon_from_community_scripts()` — on-demand official-logo lookup: fetches `https://community-scripts.org/scripts/<app>`, extracts its `rel="icon"` jsDelivr CDN URL, caches 7 days in `/tmp` (mirrors the old flame community-scripts port lookup)
+- **Icons never use `.local` or favicon endpoints** — all icons come from a CDN; the community-scripts source is the site's own jsDelivr logo link
+- Manual `ICON_OVERRIDES` (full URLs) take precedence over all of the above
 
 ### Grouping
 

@@ -32,12 +32,17 @@ load test_helper
 
 @test "homepage_icon: custom default icon for known custom app" {
   run homepage_icon "yuvomi"
-  [[ "$output" == "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/yuvomi.svg" ]]
+  [[ "$output" == "https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/yuvomi.webp" ]]
 }
 
-@test "homepage_icon: custom default for omnitools uses its github favicon url" {
+@test "homepage_icon: custom default for omnitools uses its repo logo url" {
   run homepage_icon "omnitools"
-  [[ "$output" == "https://cdn.jsdelivr.net/gh/iib0011/omni-tools@main/public/favicon.svg" ]]
+  [[ "$output" == "https://cdn.jsdelivr.net/gh/iib0011/omni-tools@main/src/assets/logo.png" ]]
+}
+
+@test "homepage_icon: custom default for convertx uses selfhst webp" {
+  run homepage_icon "convertx"
+  [[ "$output" == "https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/convertx.webp" ]]
 }
 
 @test "homepage_icon: proxmox-hive uses its github logo url" {

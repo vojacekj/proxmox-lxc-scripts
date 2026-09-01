@@ -596,14 +596,43 @@ EOF
 
 # --- HOMEPAGE CONFIG GENERATION ---
 # Default icons for apps that have no SERVICE_MAP entry / dedicated selfhst
-# slug. Values are Homepage icon values (sh-/di:/mdi-/full URL).
+# slug. Values are full CDN URLs (selfhst / dashboard-icons / the app's repo).
 declare -A CUSTOM_ICON_DEFAULTS=(
-  ["omnitools"]="https://cdn.jsdelivr.net/gh/iib0011/omni-tools@main/public/favicon.svg"
-  ["yuvomi"]="https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/yuvomi.svg"
-  ["convertx"]="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/convertx.png"
+  ["omnitools"]="https://cdn.jsdelivr.net/gh/iib0011/omni-tools@main/src/assets/logo.png"
+  ["yuvomi"]="https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/yuvomi.webp"
+  ["convertx"]="https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/convertx.webp"
   ["proxmox-hive"]="https://cdn.jsdelivr.net/gh/macokay/proxmox-hive@main/client/public/hive.svg"
   ["proxmox"]="https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/proxmox.svg"
 )
+
+# On-demand icon lookup from community-scripts.org (mirrors the old flame
+# community-scripts port lookup). Each per-app page embeds its official logo
+# as the `rel="icon"` link pointing to a jsDelivr CDN URL; we extract that.
+# Results are cached for 7 days in /tmp. Returns the CDN URL or nothing.
+fetch_icon_from_community_scripts() {
+  local service_name="$1"
+  local cache_file="/tmp/.dashboard-cs-icon-${service_name}"
+
+  if [[ -f "$cache_file" ]]; then
+    local cache_age=$(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0) ))
+    if [[ $cache_age -lt 604800 ]]; then
+      cat "$cache_file"
+      return 0
+    fi
+  fi
+
+  local page
+  page=$(curl -sL --connect-timeout 5 --max-time 10 "https://community-scripts.org/scripts/${service_name}" 2>/dev/null)
+  local icon
+  icon=$(echo "$page" | grep -oE 'rel="icon" href="https://cdn\.jsdelivr\.net/[^"]*"' | head -1 | sed 's/.*href="//; s/"$//')
+
+  if [[ -n "$icon" && "$icon" == https://* ]]; then
+    echo "$icon" > "$cache_file"
+    echo "$icon"
+    return 0
+  fi
+  return 1
+}
 
 homepage_icon() {
   local hostname_lower
@@ -634,6 +663,14 @@ homepage_icon() {
     # selfh.st SVG filenames use dashes and lowercase (e.g. paperless-ngx),
     # so pass the slug through unchanged — no dash/underscore conversion.
     echo "sh-${selfhst_ref}"
+    return 0
+  fi
+
+  # On-demand community-scripts icon lookup (cached), like the old flame port
+  # lookup — gives an official logo for any community-scripts app.
+  local cs_icon
+  if cs_icon=$(fetch_icon_from_community_scripts "$hostname_lower" 2>/dev/null); then
+    echo "$cs_icon"
     return 0
   fi
 

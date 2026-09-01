@@ -66,6 +66,14 @@ HEADER
     echo ''
 
     sed -n '/^parse_args()/,/^}/p' "${repo_root}/dashboard-discover.sh"
+
+    # Stub the community-scripts icon lookup so unit tests stay offline and
+    # deterministic (homepage_icon falls back to the server.svg CDN icon).
+    cat <<'STUB'
+fetch_icon_from_community_scripts() {
+  return 1
+}
+STUB
   } > "$out"
 }
 

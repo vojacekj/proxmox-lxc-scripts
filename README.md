@@ -93,7 +93,7 @@ Using two file-driven apps means everything is fully scriptable — no manual mo
 
 ## dashboard-discover.sh
 
-Auto-detect running LXC containers and generate config for **Gatus** (health checks) and **Homepage** (dashboard) with `.local`/IP links and icons from [selfhst/icons](https://github.com/selfhst/icons).
+Auto-detect running LXC containers and generate config for **Gatus** (health checks) and **Homepage** (dashboard) with `.local`/IP links and icons from [selfhst/icons](https://github.com/selfhst/icons) / dashboard-icons / each app's repo, with an on-demand [community-scripts](https://community-scripts.org) logo fallback.
 
 **Download:**
 
@@ -164,7 +164,7 @@ Both Gatus and Homepage reload config automatically — no service restarts requ
 | `ICON_OVERRIDES` | `"hostname:url"` pairs for custom icons (takes precedence over built-in defaults) |
 | `SKIP_APPS` | Comma-separated container names to skip (e.g., `"pve,monitoring"`) |
 
-> **Built-in custom-app icons:** `homepage_icon()` ships fallback icons as full CDN URLs — `omnitools` (its GitHub favicon), `yuvomi` (selfhst `yuvomi.svg`), `convertx` (dashboard-icons `convertx.png`), `proxmox-hive` (its GitHub `hive.svg`), and `proxmox` (selfhst `proxmox.svg`). Icons never use `.local` or favicon endpoints (CDN only). Override any of these with `ICON_OVERRIDES`.
+> **Built-in custom-app icons:** `homepage_icon()` ships fallback icons as full CDN URLs — `omnitools`, `yuvomi`, `convertx` (from community-scripts.org, or their GitHub assets), `proxmox-hive` (its GitHub `hive.svg`), and `proxmox` (selfhst `proxmox.svg`). For any other unrecognized app it performs an on-demand [community-scripts](https://community-scripts.org) logo lookup (cached 7 days), falling back to `server.svg`. Icons never use `.local` or favicon endpoints (CDN only). Override any of these with `ICON_OVERRIDES`.
 
 **Cron (every 15 minutes):**
 
