@@ -78,6 +78,7 @@ GATUS_CONFIG_MODE="single"
 GATUS_SCAN_INTERVAL="60"
 GATUS_ALERTING="yes"
 GATUS_RESTART_SERVICE="no"
+GATUS_PORT="8080"
 
 # Homepage
 HOMEPAGE_ENABLED="yes"
@@ -781,17 +782,22 @@ main() {
     log INFO "Using Gatus LXC: ${GATUS_LXC_ID}"
   fi
 
-  # Resolve the Gatus base URL used by Homepage widgets.
+  # Resolve the Gatus base URL used by Homepage widgets. Gatus listens on
+  # 0.0.0.0:${GATUS_PORT}, so the widget URL must include the port or the
+  # Homepage widget hits port 80 and shows "Api Error".
   if [[ -z "$HOMEPAGE_GATUS_URL" ]] && [[ "$GATUS_ENABLED" == "yes" && -n "$GATUS_LXC_ID" ]]; then
-    if gatus_ip=$(get_lxc_ip "$GATUS_LXC_ID" 2>/dev/null); then
-      HOMEPAGE_GATUS_URL="http://${gatus_ip}"
+    if [[ "$USE_LOCAL_DOMAINS" == "yes" ]]; then
+      HOMEPAGE_GATUS_URL="http://gatus.local:${GATUS_PORT}"
+      log INFO "Homepage Gatus URL: ${HOMEPAGE_GATUS_URL}"
+    elif gatus_ip=$(get_lxc_ip "$GATUS_LXC_ID" 2>/dev/null); then
+      HOMEPAGE_GATUS_URL="http://${gatus_ip}:${GATUS_PORT}"
       log INFO "Homepage Gatus URL: ${HOMEPAGE_GATUS_URL}"
     else
-      HOMEPAGE_GATUS_URL="http://gatus.local"
+      HOMEPAGE_GATUS_URL="http://gatus.local:${GATUS_PORT}"
       log INFO "Homepage Gatus URL (fallback): ${HOMEPAGE_GATUS_URL}"
     fi
   elif [[ -z "$HOMEPAGE_GATUS_URL" ]]; then
-    HOMEPAGE_GATUS_URL="http://gatus.local"
+    HOMEPAGE_GATUS_URL="http://gatus.local:${GATUS_PORT}"
   fi
 
   # Resolve Homepage LXC

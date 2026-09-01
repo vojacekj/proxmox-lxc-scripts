@@ -12,6 +12,7 @@ GATUS_ENABLED="yes"
 # GATUS_SCAN_INTERVAL="60"        # seconds between checks per service
 # GATUS_ALERTING="yes"            # generate alerting block from telegram/gotify conf
 # GATUS_RESTART_SERVICE="no"
+# GATUS_PORT="8080"               # Gatus listen port (used in Homepage widget URL)
 
 # --- Homepage ---
 # Homepage runs as an LXC (community script ct/homepage.sh). It hot-reloads

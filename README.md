@@ -149,11 +149,12 @@ Both Gatus and Homepage reload config automatically — no service restarts requ
 | `GATUS_SCAN_INTERVAL` | Seconds between checks per service (default `60`) |
 | `GATUS_ALERTING` | `yes` to emit alerting blocks from `telegram.conf`/`gotify.conf` |
 | `GATUS_RESTART_SERVICE` | `yes` to restart Gatus after pushing (default `no` — avoids restart churn) |
+| `GATUS_PORT` | Gatus listen port (default `8080`), appended to the Homepage widget URL |
 | `HOMEPAGE_ENABLED` | Set to `no` to skip Homepage config generation |
 | `HOMEPAGE_LXC_ID` | Auto-detected on first run, or set manually |
 | `HOMEPAGE_CONFIG_DIR` | Config dir inside Homepage LXC (default `/opt/homepage/config`) |
 | `HOMEPAGE_SERVICES_FILE` | Filename to write (default `services.yaml`) |
-| `HOMEPAGE_GATUS_URL` | Base URL Homepage uses for the Gatus widget (auto-detected; override to use a hostname) |
+| `HOMEPAGE_GATUS_URL` | Base URL Homepage uses for the Gatus widget (auto-derived as `<gatus>:<GATUS_PORT>`; override to use a custom hostname/path) |
 | `USE_LOCAL_DOMAINS` | `yes` to link Homepage services as `<name>.local` mDNS hostnames (default, matches old Flame behavior); `no` to use raw IPs |
 | `SCAN_PORTS` | Comma-separated ports to probe for unknown services |
 | `PORT_OVERRIDES` | `"hostname:port"` pairs for non-standard ports |
