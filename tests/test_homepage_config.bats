@@ -33,7 +33,7 @@ load test_helper
 @test "homepage_service_yaml: emits href, icon, gatus widget" {
   run homepage_service_yaml "jellyfin" "http" "10.0.0.5" "8096" "sh-jellyfin" "http://gatus.local"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"href: http://10.0.0.5:8096"* ]]
+  [[ "$output" == *"href: http://jellyfin.local:8096"* ]]
   [[ "$output" == *"icon: sh-jellyfin"* ]]
   [[ "$output" == *"type: gatus"* ]]
   [[ "$output" == *"url: http://gatus.local"* ]]
@@ -41,13 +41,19 @@ load test_helper
 
 @test "homepage_service_yaml: omits default port 80" {
   run homepage_service_yaml "pihole" "http" "10.0.0.6" "80" "sh-pi_hole" "http://gatus.local"
-  [[ "$output" == *"href: http://10.0.0.6"* ]]
+  [[ "$output" == *"href: http://pihole.local"* ]]
   [[ "$output" != *":80"* ]]
 }
 
 @test "homepage_service_yaml: omits default port 443" {
   run homepage_service_yaml "nextcloud" "https" "10.0.0.7" "443" "sh-nextcloud" "http://gatus.local"
-  [[ "$output" == *"href: https://10.0.0.7"* ]]
+  [[ "$output" == *"href: https://nextcloud.local"* ]]
+}
+
+@test "homepage_service_yaml: uses IP href when USE_LOCAL_DOMAINS=no" {
+  export USE_LOCAL_DOMAINS="no"
+  run homepage_service_yaml "jellyfin" "http" "10.0.0.5" "8096" "sh-jellyfin" "http://gatus.local"
+  [[ "$output" == *"href: http://10.0.0.5:8096"* ]]
 }
 
 # --- get_service_group ---

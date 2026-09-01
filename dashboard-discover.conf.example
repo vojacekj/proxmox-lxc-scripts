@@ -20,6 +20,7 @@ HOMEPAGE_ENABLED="yes"
 # HOMEPAGE_LXC_ID="102"           # leave empty + first run to auto-detect by name
 # HOMEPAGE_CONFIG_DIR="/opt/homepage/config"
 # HOMEPAGE_SERVICES_FILE="services.yaml"
+# USE_LOCAL_DOMAINS="yes"          # yes = link services as name.local (mDNS); no = raw IPs
 
 # --- Discovery ---
 # Comma-separated container names to exclude (case-insensitive)

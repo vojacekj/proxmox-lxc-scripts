@@ -154,6 +154,7 @@ Both Gatus and Homepage reload config automatically — no service restarts requ
 | `HOMEPAGE_CONFIG_DIR` | Config dir inside Homepage LXC (default `/opt/homepage/config`) |
 | `HOMEPAGE_SERVICES_FILE` | Filename to write (default `services.yaml`) |
 | `HOMEPAGE_GATUS_URL` | Base URL Homepage uses for the Gatus widget (auto-detected; override to use a hostname) |
+| `USE_LOCAL_DOMAINS` | `yes` to link Homepage services as `<name>.local` mDNS hostnames (default, matches old Flame behavior); `no` to use raw IPs |
 | `SCAN_PORTS` | Comma-separated ports to probe for unknown services |
 | `PORT_OVERRIDES` | `"hostname:port"` pairs for non-standard ports |
 | `ICON_OVERRIDES` | `"hostname:url"` pairs for custom icons |
@@ -208,6 +209,9 @@ alerting:
   telegram:
     token: 123:ABC
     id: chat-1
+  gotify:
+    server: https://gotify.local
+    token: gotify-token
 interval: 60
 endpoints:
   - name: jellyfin
@@ -215,7 +219,9 @@ endpoints:
     url: http://10.10.10.101:8096
     interval: 60s
     conditions:
-      - [CONNECTED] == true
+      - "[CONNECTED] == true"
+    alerts:
+      - type: gotify
 ```
 
 ---

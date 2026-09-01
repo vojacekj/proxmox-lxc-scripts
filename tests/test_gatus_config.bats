@@ -97,9 +97,11 @@ load test_helper
   [[ "$output" == *"group: default"* ]]
 }
 
-@test "gatus_endpoint_yaml: http condition CONNECTED" {
+@test "gatus_endpoint_yaml: http condition CONNECTED quoted for valid yaml" {
+  export GATUS_ALERTING="no"; export TOKEN=""; export CHAT_ID=""; export GOTIFY_SERVER=""; export GOTIFY_TOKEN=""
+  local quoted='"[CONNECTED] == true"'
   run gatus_endpoint_yaml "jellyfin" "http" "10.0.0.5" "8096" "media"
-  [[ "$output" == *"[CONNECTED] == true"* ]]
+  [[ "$output" == *"${quoted}"* ]]
 }
 
 @test "gatus_endpoint_yaml: omits default port 80" {
@@ -114,7 +116,56 @@ load test_helper
   [[ "$output" != *":443"* ]]
 }
 
-@test "gatus_endpoint_yaml: emits alert entries" {
+@test "gatus_endpoint_yaml: no alerts block when no creds and alerting disabled" {
+  export GATUS_ALERTING="no"
+  export TOKEN=""
+  export CHAT_ID=""
+  export GOTIFY_SERVER=""
+  export GOTIFY_TOKEN=""
+  run gatus_endpoint_yaml "jellyfin" "http" "10.0.0.5" "8096" "media"
+  [[ "$output" != *"alerts:"* ]]
+}
+
+@test "gatus_endpoint_yaml: no alerts block when no creds configured" {
+  export GATUS_ALERTING="yes"
+  export TOKEN=""
+  export CHAT_ID=""
+  export GOTIFY_SERVER=""
+  export GOTIFY_TOKEN=""
+  run gatus_endpoint_yaml "jellyfin" "http" "10.0.0.5" "8096" "media"
+  [[ "$output" != *"alerts:"* ]]
+}
+
+@test "gatus_endpoint_yaml: emits telegram alert with telegram creds" {
+  export GATUS_ALERTING="yes"
+  export TOKEN="abc123"
+  export CHAT_ID="chat1"
+  export GOTIFY_SERVER=""
+  export GOTIFY_TOKEN=""
+  run gatus_endpoint_yaml "jellyfin" "http" "10.0.0.5" "8096" "media"
+  [[ "$output" == *"alerts:"* ]]
+  [[ "$output" == *"type: telegram"* ]]
+  [[ "$output" != *"type: gotify"* ]]
+}
+
+@test "gatus_endpoint_yaml: emits gotify alert with gotify creds" {
+  export GATUS_ALERTING="yes"
+  export TOKEN=""
+  export CHAT_ID=""
+  export GOTIFY_SERVER="http://gotify.local"
+  export GOTIFY_TOKEN="tok"
+  run gatus_endpoint_yaml "jellyfin" "http" "10.0.0.5" "8096" "media"
+  [[ "$output" == *"alerts:"* ]]
+  [[ "$output" == *"type: gotify"* ]]
+  [[ "$output" != *"type: telegram"* ]]
+}
+
+@test "gatus_endpoint_yaml: emits both alerts with both creds" {
+  export GATUS_ALERTING="yes"
+  export TOKEN="abc123"
+  export CHAT_ID="chat1"
+  export GOTIFY_SERVER="http://gotify.local"
+  export GOTIFY_TOKEN="tok"
   run gatus_endpoint_yaml "jellyfin" "http" "10.0.0.5" "8096" "media"
   [[ "$output" == *"type: telegram"* ]]
   [[ "$output" == *"type: gotify"* ]]

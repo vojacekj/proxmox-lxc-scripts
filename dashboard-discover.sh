@@ -87,6 +87,9 @@ HOMEPAGE_SERVICES_FILE="services.yaml"
 # Base URL Homepage uses to reach the Gatus widget (defaults to the hostname
 # used during discovery; override with the IP if mDNS is not set up).
 HOMEPAGE_GATUS_URL=""
+# Link each service by its mDNS hostname (<name>.local) instead of its raw IP.
+# Gatus still probes the real IP; only the Homepage links switch to hostnames.
+USE_LOCAL_DOMAINS="yes"
 
 if [[ -f "$CONF_FILE" ]]; then
   secure_source "$CONF_FILE"
@@ -541,10 +544,19 @@ gatus_endpoint_yaml() {
   [[ "$port" != "80" && "$port" != "443" ]] && url="${url}:${port}"
 
   local condition
-  if [[ "$protocol" == "https" ]]; then
-    condition="[CONNECTED] == true"
-  else
-    condition="[CONNECTED] == true"
+  # Quote the condition: Gatus uses `[CONNECTED] == true` syntax, but the
+  # leading `[` looks like a YAML flow sequence, so it must be quoted to
+  # stay a valid YAML string for both HTTPS and HTTP checks.
+  condition='"[CONNECTED] == true"'
+
+  local alerts_block=""
+  if [[ "$GATUS_ALERTING" == "yes" ]]; then
+    if [[ -n "$TOKEN" && -n "$CHAT_ID" ]]; then
+      alerts_block+="      - type: telegram"$'\n'
+    fi
+    if [[ -n "$GOTIFY_SERVER" && -n "$GOTIFY_TOKEN" ]]; then
+      alerts_block+="      - type: gotify"$'\n'
+    fi
   fi
 
   cat <<EOF
@@ -554,10 +566,10 @@ gatus_endpoint_yaml() {
     interval: 60s
     conditions:
       - ${condition}
-    alerts:
-      - type: telegram
-      - type: gotify
 EOF
+  if [[ -n "$alerts_block" ]]; then
+    printf '    alerts:\n%b' "$alerts_block"
+  fi
 }
 
 # --- HOMEPAGE CONFIG GENERATION ---
@@ -590,6 +602,19 @@ homepage_icon() {
   return 0
 }
 
+# Human-facing host to show in Homepage links. With USE_LOCAL_DOMAINS=yes
+# this is the avahi/mDNS hostname (name.local, matching the old Flame script);
+# otherwise it falls back to the raw container IP.
+link_host() {
+  local name="$1"
+  local ip="$2"
+  if [[ "$USE_LOCAL_DOMAINS" == "yes" ]]; then
+    printf '%s.local' "${name,,}"
+  else
+    printf '%s' "$ip"
+  fi
+}
+
 # Build a Homepage services.yaml entry for a single service within a service
 # group. Groups are emitted at column 0 (e.g. "- Media:"), so each service is
 # indented 4 spaces and its properties 8 spaces (Homepage's required layout).
@@ -601,7 +626,9 @@ homepage_service_yaml() {
   local icon="$5"
   local gatus_url="$6"
 
-  local href="${protocol}://${ip}"
+  local host
+  host=$(link_host "$name" "$ip")
+  local href="${protocol}://${host}"
   [[ "$port" != "80" && "$port" != "443" ]] && href="${href}:${port}"
 
   cat <<EOF

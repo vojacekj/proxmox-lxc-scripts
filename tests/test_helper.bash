@@ -33,6 +33,7 @@ HOMEPAGE_ENABLED="yes"
 HOMEPAGE_CONFIG_DIR="/opt/homepage/config"
 HOMEPAGE_SERVICES_FILE="services.yaml"
 HOMEPAGE_GATUS_URL="http://gatus.local"
+USE_LOCAL_DOMAINS="yes"
 HEADER
 
     # Export the associative array (declare -gxA, bash 5.1+) so it
@@ -46,7 +47,7 @@ HEADER
     sed -n '/^CATEGORY_MAP="/,/\"$/p' "${repo_root}/dashboard-discover.sh"
 
 
-    for fn in normalize_url lookup_service get_icon_url get_port_override get_service_group homepage_icon; do
+    for fn in normalize_url lookup_service get_icon_url get_port_override get_service_group homepage_icon link_host; do
       sed -n "/^${fn}()/,/^}/p" "${repo_root}/dashboard-discover.sh"
       echo ''
     done
