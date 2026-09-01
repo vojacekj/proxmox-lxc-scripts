@@ -541,9 +541,11 @@ gatus_endpoint_yaml() {
   local port="$4"
   local group="$5"
 
-  local host
-  host=$(link_host "$name" "$ip")
-  local url="${protocol}://${host}"
+  # Gatus probes must use the raw IP, not the `.local` hostname: Gatus is a Go
+  # binary whose resolver does not support mDNS/Bonjour, so it cannot resolve
+  # `*.local` names and every probe would fail. `USE_LOCAL_DOMAINS` only affects
+  # the browser-facing Homepage links below.
+  local url="${protocol}://${ip}"
   [[ "$port" != "80" && "$port" != "443" ]] && url="${url}:${port}"
 
   local condition
