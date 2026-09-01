@@ -12,9 +12,9 @@ load test_helper
   [[ "$output" == "sh-jellyfin" ]]
 }
 
-@test "homepage_icon: normalizes dash to underscore" {
+@test "homepage_icon: passes dash slug through unchanged" {
   run homepage_icon "home-assistant"
-  [[ "$output" == "sh-home_assistant" ]]
+  [[ "$output" == "sh-home-assistant" ]]
 }
 
 @test "homepage_icon: unknown service falls back to sh-server" {

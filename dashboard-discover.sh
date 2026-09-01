@@ -249,7 +249,7 @@ declare -A SERVICE_MAP=(
   ["file-browser"]="file-browser:8080"
   ["minio"]="minio:9001"
   ["immich"]="immich:2283"
-  ["paperless"]="paperless:8000"
+  ["paperless"]="paperless-ngx:8000"
   ["paperless-ngx"]="paperless-ngx:8000"
 
   # Git / Code
@@ -277,7 +277,7 @@ declare -A SERVICE_MAP=(
 
   # Documents
   ["bookstack"]="bookstack:80"
-  ["wikijs"]="wikijs:3000"
+  ["wikijs"]="wiki-js:3000"
   ["dokuwiki"]="dokuwiki:80"
   ["outline"]="outline:3000"
   ["mealie"]="mealie:9925"
@@ -593,8 +593,9 @@ homepage_icon() {
   local service_info
   if service_info=$(lookup_service "$hostname_lower"); then
     local selfhst_ref="${service_info%%:*}"
-    # Normalize dashes to underscores matches selfhst naming used by sh- shorthand.
-    echo "sh-${selfhst_ref//-/_}"
+    # selfh.st SVG filenames use dashes and lowercase (e.g. paperless-ngx),
+    # so pass the slug through unchanged — no dash/underscore conversion.
+    echo "sh-${selfhst_ref}"
     return 0
   fi
 
@@ -870,7 +871,7 @@ main() {
     log INFO "  Detected port: ${port}"
 
     local protocol="http"
-    [[ "$port" == "443" || "$port" == "8443" ]] && protocol="https"
+    [[ "$port" == "443" || "$port" == "8443" || "$port" == "9443" ]] && protocol="https"
 
     local group=""
     group=$(get_service_group "$name_lower" 2>/dev/null) || group=""
