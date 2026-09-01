@@ -30,13 +30,19 @@ load test_helper
 
 # --- homepage_service_yaml ---
 
-@test "homepage_service_yaml: emits href, icon, gatus widget" {
+@test "homepage_service_yaml: emits href, icon; no widget for non-gatus" {
   run homepage_service_yaml "jellyfin" "http" "10.0.0.5" "8096" "sh-jellyfin" "http://gatus.local"
   [ "$status" -eq 0 ]
   [[ "$output" == *"href: http://jellyfin.local:8096"* ]]
   [[ "$output" == *"icon: sh-jellyfin"* ]]
+  [[ "$output" != *"widget:"* ]]
+}
+
+@test "homepage_service_yaml: attaches gatus widget only for gatus service" {
+  run homepage_service_yaml "gatus" "http" "10.0.0.99" "8080" "sh-gatus" "http://gatus.local:8080"
+  [[ "$output" == *"widget:"* ]]
   [[ "$output" == *"type: gatus"* ]]
-  [[ "$output" == *"url: http://gatus.local"* ]]
+  [[ "$output" == *"url: http://gatus.local:8080"* ]]
 }
 
 @test "homepage_service_yaml: omits default port 80" {

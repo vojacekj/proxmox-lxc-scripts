@@ -624,6 +624,10 @@ link_host() {
 # Build a Homepage services.yaml entry for a single service within a service
 # group. Groups are emitted at column 0 (e.g. "- Media:"), so each service is
 # indented 4 spaces and its properties 8 spaces (Homepage's required layout).
+#
+# The Homepage `gatus` widget shows Gatus-wide *aggregate* stats (up/down/
+# uptime), so it's only attached to the `gatus` card — putting it on every
+# card would show identical numbers everywhere.
 homepage_service_yaml() {
   local name="$1"
   local protocol="$2"
@@ -642,10 +646,14 @@ homepage_service_yaml() {
         href: ${href}
         icon: ${icon}
         description: Discovered from Proxmox LXC
+EOF
+  if [[ "$name" == "gatus" ]]; then
+    cat <<EOF
         widget:
           type: gatus
           url: ${gatus_url}
 EOF
+  fi
 }
 
 # --- PCT PUSH ---

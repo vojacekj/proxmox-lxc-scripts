@@ -78,12 +78,12 @@ Config is loaded from `/root/scripts/` (the script's directory) first, then from
 | App | LXC install script | Role | Config path | Port |
 |-----|--------------------|------|-------------|------|
 | [Gatus](https://github.com/TwiN/gatus) | `ct/gatus.sh` | Probes services (HTTP/TCP), uptime history, alerting | `/opt/gatus/config` | 8080 |
-| [Homepage](https://gethomepage.dev) | `ct/homepage.sh` | Start page: icons + links + per-service Gatus status widgets | `/opt/homepage/config` | 3000 |
+| [Homepage](https://gethomepage.dev) | `ct/homepage.sh` | Start page: icons + links + Gatus uptime widget on the Gatus card | `/opt/homepage/config` | 3000 |
 
 Flow:
 
 1. `dashboard-discover.sh` scans running LXCs, detects web services and ports (built-in map → community-scripts GitHub → port scan).
-2. It renders **Gatus endpoint config** (one service = one HTTP/TCP check, grouped, with alerting) and **Homepage `services.yaml`** (icons + links + a `gatus` widget per service).
+2. It renders **Gatus endpoint config** (one service = one HTTP/TCP check, grouped, with alerting) and a **Homepage `services.yaml`** (icons + links, plus a single Gatus uptime widget on the `gatus` card — the widget shows Gatus-wide aggregate stats, so it's not repeated per service).
 3. Files are pushed into each LXC via `pct push`.
 4. **Both apps hot-reload**: Gatus re-reads its config every ~30s; Homepage watches `services.yaml` and updates immediately. No restarts needed.
 
@@ -125,7 +125,7 @@ chmod 600 dashboard-discover.conf
 - Matches services against a built-in map of 80+ common homelab apps
 - Falls back to port scanning if the service isn't in the map
 - Renders Gatus endpoints (HTTP/TCP checks, grouped by category, with alerting)
-- Renders Homepage `services.yaml` (icons, links, per-service `gatus` status widget)
+- Renders Homepage `services.yaml` (icons, links, single Gatus uptime widget on the `gatus` card)
 - Pushes config into each LXC via `pct push`
 - Sends a notification summary via Telegram/Gotify
 

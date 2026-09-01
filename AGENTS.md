@@ -56,7 +56,7 @@ Proxmox VE helper scripts for LXC container management with Telegram/Gotify noti
 - `gatus_endpoint_yaml()` — one HTTP/TCP check (name, group, url, quoted `[CONNECTED]` condition, alerts). The monitor `url` always uses the raw IP (see below). The condition value is **quoted** (`- "[CONNECTED] == true"`) because a leading `[` is otherwise parsed as a YAML flow sequence and Gatus exits on config parse error. `alerts:` lists only providers actually configured (telegram only if `TOKEN`+`CHAT_ID`, gotify only if `GOTIFY_SERVER`+`GOTIFY_TOKEN`), since Gatus fails if an endpoint references an undeclared alerting provider.
 - `link_host()` — returns the `name.local` mDNS hostname when `USE_LOCAL_DOMAINS=yes`, else the raw IP; used for browser-facing Homepage `href` links only
 - Gatus monitor `url` targets always use the raw IP (Gatus is a Go binary whose resolver doesn't do mDNS, so `*.local` probes fail); `USE_LOCAL_DOMAINS` does **not** affect Gatus endpoints
-- `homepage_service_yaml()` — one service entry (href, icon, gatus widget)
+- `homepage_service_yaml()` — one service entry (href, icon). The Gatus widget is attached **only to the `gatus` service card**, since the widget shows Gatus-wide aggregate stats; repeating it on every card duplicates identical numbers.
 - `homepage_icon()` — `sh-` shorthand from SERVICE_MAP
 - `pct_push()` — `pct exec mkdir -p` + `pct push` + `chmod` into an LXC
 - `find_lxc_by_name()` — locate a running LXC by name substring or open port
