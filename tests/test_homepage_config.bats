@@ -276,3 +276,36 @@ load test_helper
   [[ "$a" == "$b" ]] && [[ "$b" == "$c" ]]     # stable from run1 for gatus
   rm -f "$gen" "$base" "$fa" "$fb"
 }
+
+# --- new_service_names / new_endpoint_names (notification "added" tracking) ---
+
+@test "new_service_names: only returns names not already deployed" {
+  local gen exist
+  gen=$(mktemp); exist=$(mktemp)
+  printf '%s\n' '- Media:' '    - jellyfin:' '    - sonarr:' > "$gen"
+  printf '%s\n' '- Media:' '    - jellyfin:' > "$exist"
+  run new_service_names "$gen" "$exist"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "sonarr" ]]
+  rm -f "$gen" "$exist"
+}
+
+@test "new_service_names: empty when all already deployed" {
+  local gen exist
+  gen=$(mktemp); exist=$(mktemp)
+  printf '%s\n' '- Media:' '    - jellyfin:' > "$gen"
+  printf '%s\n' '- Media:' '    - jellyfin:' > "$exist"
+  run new_service_names "$gen" "$exist"
+  [[ "$output" == "" ]]
+  rm -f "$gen" "$exist"
+}
+
+@test "new_endpoint_names: returns only undeployed endpoints" {
+  local gen exist
+  gen=$(mktemp); exist=$(mktemp)
+  printf '%s\n' 'endpoints:' '  - name: jellyfin' '  - name: sonarr' > "$gen"
+  printf '%s\n' 'endpoints:' '  - name: jellyfin' > "$exist"
+  run new_endpoint_names "$gen" "$exist"
+  [[ "$output" == "sonarr" ]]
+  rm -f "$gen" "$exist"
+}

@@ -39,6 +39,8 @@ Or install individual scripts — see each script's section below for download c
 
 Both **Telegram** and **Gotify** are supported. If both config files exist, notifications are sent to both channels. If only one exists, only that one receives notifications. Config files must be in the same directory as the scripts (`/root/scripts/`).
 
+During discovery, a status report (added services, already-known skip list, failures) is sent over the configured channel(s) **only when something changed or failed** — an idle cron run sends nothing, matching the old Flame behavior. `send_notification()` → `send_telegram()` / `send_gotify()`.
+
 ### Telegram
 
 1. Talk to [@BotFather](https://t.me/BotFather) on Telegram and create a bot to get your **Bot Token**.

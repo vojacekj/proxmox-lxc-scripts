@@ -863,6 +863,27 @@ merge_gatus_yaml() {
   rm -f "$new_blocks"
 }
 
+# --- NOTIFICATION HELPERS ---
+# Names that a generated file would add but that are not yet in the deployed
+# file — i.e. services/endpoints actually discovered this run (mirrors Flame's
+# "added" tracking so we can notify only on real changes).
+
+# New service names (Homepage): names in gen not already in the deployed file.
+new_service_names() {
+  local gen="$1"
+  local existing="$2"
+  comm -13 <(if [[ -n "$existing" && -f "$existing" ]]; then extract_service_names "$existing"; fi) \
+           <(extract_service_names "$gen")
+}
+
+# New endpoint names (Gatus): endpoints in gen not already deployed.
+new_endpoint_names() {
+  local gen="$1"
+  local existing="$2"
+  comm -13 <(if [[ -n "$existing" && -f "$existing" ]]; then extract_endpoint_names "$existing"; fi) \
+           <(extract_endpoint_names "$gen")
+}
+
 # --- PCT PUSH ---
 # Push a local file into the given LXC, creating parent dir and setting perms.
 pct_push() {
@@ -1045,6 +1066,9 @@ main() {
   local -a names=()
   local added=0
   local skipped_no_port=0
+  local failed=0
+  local new_gatus_names=""
+  local new_homepage_names=""
 
   for line in "${lxc_lines[@]}"; do
     [[ -z "$line" ]] && continue
@@ -1152,6 +1176,11 @@ main() {
     local gatus_merged_file="${TMPDIR:-/tmp}/gatus-final.$$.yaml"
     merge_gatus_yaml "$gatus_file" "$existing_gatus_yaml" > "$gatus_merged_file"
 
+    new_gatus_names=""
+    if [[ "$DRY_RUN" != "true" ]]; then
+      new_gatus_names=$(new_endpoint_names "$gatus_file" "$existing_gatus_yaml")
+    fi
+
     if [[ "$DRY_RUN" == "true" ]]; then
       log INFO "  [DRY RUN] Would push Gatus config to LXC ${GATUS_LXC_ID}:${GATUS_CONFIG_DIR}/config.yaml"
     else
@@ -1161,9 +1190,12 @@ main() {
           if [[ "$GATUS_RESTART_SERVICE" == "yes" ]]; then
             pct exec "$GATUS_LXC_ID" -- systemctl restart gatus &>/dev/null && log INFO "  Restarted Gatus service."
           fi
+        else
+          ((failed++)) || true
         fi
       else
         log ERROR "  GATUS_LXC_ID not set; cannot push Gatus config."
+        ((failed++)) || true
       fi
     fi
     rm -f "$existing_gatus_yaml" "$gatus_file" "$gatus_merged_file"
@@ -1215,12 +1247,19 @@ main() {
     local merged_file="${TMPDIR:-/tmp}/homepage-final.$$.yaml"
     merge_homepage_yaml "$homepage_file" "$existing_homepage_yaml" > "$merged_file"
 
+    new_homepage_names=""
+    if [[ "$DRY_RUN" != "true" ]]; then
+      new_homepage_names=$(new_service_names "$homepage_file" "$existing_homepage_yaml")
+    fi
+
     if [[ "$DRY_RUN" == "true" ]]; then
       log INFO "  [DRY RUN] Would push Homepage config to LXC ${HOMEPAGE_LXC_ID}:${HOMEPAGE_CONFIG_DIR}/${HOMEPAGE_SERVICES_FILE}"
     else
       if [[ -n "$HOMEPAGE_LXC_ID" ]]; then
         if pct_push "$HOMEPAGE_LXC_ID" "$merged_file" "${HOMEPAGE_CONFIG_DIR}/${HOMEPAGE_SERVICES_FILE}"; then
           log INFO "  Pushed Homepage config."
+        else
+          ((failed++)) || true
         fi
       else
         log ERROR "  HOMEPAGE_LXC_ID not set; cannot push Homepage config."
@@ -1231,11 +1270,59 @@ main() {
   fi
 
   # Summary
+  # "added" = services actually new this run (union of Gatus + Homepage new
+  # names). Everything else we discovered was already deployed.
+  local all_new
+  all_new=$(printf '%s\n' "$new_gatus_names" "$new_homepage_names" | sort -u | grep -v '^$')
+  local added_names=""
+  local -A newset=()
+  local n
+  while IFS= read -r n; do [[ -n "$n" ]] && newset["$n"]=1; done <<< "$all_new"
+
+  # Recompute "added" as only the services truly new this run (Flame semantics),
+  # not the raw discovery count accumulated in the loop above.
+  added=0
+  local skipped_exists=0
+  local skipped_names=""
+  for own in "${names[@]}"; do
+    if [[ -n "${newset[$own]+x}" ]]; then
+      added_names+="${added_names:+, }${own}"
+      ((added++)) || true
+    else
+      skipped_names+="${skipped_names:+, }${own}"
+      ((skipped_exists++)) || true
+    fi
+  done
+
   log INFO "========================================"
   log INFO "Summary"
-  log INFO "   Discovered:     $added"
-  log INFO "   No web service: $skipped_no_port"
+  log INFO "   Added:           $added"
+  if [[ -n "$added_names" ]]; then
+    log INFO "     - ${added_names}"
+  fi
+  log INFO "   Already known:   $skipped_exists"
+  if [[ -n "$skipped_names" ]]; then
+    log INFO "     - ${skipped_names}"
+  fi
+  log INFO "   No web service:  $skipped_no_port"
+  log INFO "   Failed:          $failed"
   log INFO "========================================"
+
+  # Notify only on real changes or failures (like Flame), never on an idle run.
+  if [[ "$DRY_RUN" != "true" ]] && [[ "$added" -gt 0 || "$failed" -gt 0 ]]; then
+    local REPORT="*Dashboard Auto-Discover: ${HOSTNAME}*"$'\n\n'
+    REPORT+="Added: ${added}"$'\n'
+    [[ -n "$added_names" ]] && REPORT+="${added_names}"$'\n'
+    REPORT+="Already known: ${skipped_exists}"$'\n'
+    [[ -n "$skipped_names" ]] && REPORT+="${skipped_names}"$'\n'
+    REPORT+="No web service: ${skipped_no_port}"$'\n'
+    REPORT+="Failed: ${failed}"
+    log INFO "Sending notification..."
+    send_notification "$REPORT"
+  else
+    log INFO "No changes — skipping notification."
+  fi
+
   log INFO "Reloading note: Gatus checks its config every 30s and Homepage watches "
   log INFO "its YAML files, so new config is picked up automatically."
   log INFO "Done."
