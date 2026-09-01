@@ -1,0 +1,32 @@
+# Dashboard Auto-Discover Configuration
+# Copy to dashboard-discover.conf and chmod 600 (root:root required).
+# Auto-generated defaults can be left commented out; they are built-in.
+
+# --- Gatus ---
+# Gatus runs as an LXC (community script ct/gatus.sh). It reloads its config
+# automatically on file change (~every 30s).
+GATUS_ENABLED="yes"
+# GATUS_LXC_ID="101"              # leave empty + first run to auto-detect by name
+# GATUS_CONFIG_DIR="/opt/gatus/config"
+# GATUS_CONFIG_MODE="single"      # single = overwrite config.yaml (stock install)
+# GATUS_SCAN_INTERVAL="60"        # seconds between checks per service
+# GATUS_ALERTING="yes"            # generate alerting block from telegram/gotify conf
+# GATUS_RESTART_SERVICE="no"
+
+# --- Homepage ---
+# Homepage runs as an LXC (community script ct/homepage.sh). It hot-reloads
+# its YAML config on file change (no restart needed for services.yaml).
+HOMEPAGE_ENABLED="yes"
+# HOMEPAGE_LXC_ID="102"           # leave empty + first run to auto-detect by name
+# HOMEPAGE_CONFIG_DIR="/opt/homepage/config"
+# HOMEPAGE_SERVICES_FILE="services.yaml"
+
+# --- Discovery ---
+# Comma-separated container names to exclude (case-insensitive)
+# SKIP_APPS="pve,monitoring"
+# Ports scanned when a service isn't in the built-in map
+# SCAN_PORTS="80,443,8080,8443,3000,5000,8096,8920,9090,8123,7878,8888,9000,9696,5678"
+# Manual port overrides: "name:port name2:port2"
+# PORT_OVERRIDES="myapp:8080 custom:3000"
+# Manual icon overrides: "name:url ..."
+# ICON_OVERRIDES="myapp:https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/docker.svg"
