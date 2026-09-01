@@ -158,8 +158,10 @@ Both Gatus and Homepage reload config automatically — no service restarts requ
 | `USE_LOCAL_DOMAINS` | `yes` to link Homepage services as `<name>.local` mDNS hostnames (default, matches old Flame behavior); `no` to use raw IPs |
 | `SCAN_PORTS` | Comma-separated ports to probe for unknown services |
 | `PORT_OVERRIDES` | `"hostname:port"` pairs for non-standard ports |
-| `ICON_OVERRIDES` | `"hostname:url"` pairs for custom icons |
+| `ICON_OVERRIDES` | `"hostname:url"` pairs for custom icons (takes precedence over built-in defaults) |
 | `SKIP_APPS` | Comma-separated container names to skip (e.g., `"pve,monitoring"`) |
+
+> **Built-in custom-app icons:** `homepage_icon()` ships fallback icons for `omnitools` (`mdi:sitemap`), `yuvomi` (selfhst `yuvomi.svg`), `convertx` (dashboard-icons `convertx.png`), and `proxmox-hive` (selfhst `proxmox.svg`). Override any of these with `ICON_OVERRIDES`.
 
 **Cron (every 15 minutes):**
 

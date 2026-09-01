@@ -578,6 +578,15 @@ EOF
 }
 
 # --- HOMEPAGE CONFIG GENERATION ---
+# Default icons for apps that have no SERVICE_MAP entry / dedicated selfhst
+# slug. Values are Homepage icon values (sh-/di:/mdi-/full URL).
+declare -A CUSTOM_ICON_DEFAULTS=(
+  ["omnitools"]="mdi:sitemap"
+  ["yuvomi"]="https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/yuvomi.svg"
+  ["convertx"]="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/convertx.png"
+  ["proxmox-hive"]="https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/proxmox.svg"
+)
+
 homepage_icon() {
   local hostname_lower
   hostname_lower=$(echo "$1" | tr '[:upper:]' '[:lower:]')
@@ -593,6 +602,12 @@ homepage_icon() {
         return 0
       fi
     done
+  fi
+
+  # Built-in defaults for known custom apps (before generic fallback).
+  if [[ -n "${CUSTOM_ICON_DEFAULTS[$hostname_lower]+x}" ]]; then
+    echo "${CUSTOM_ICON_DEFAULTS[$hostname_lower]}"
+    return 0
   fi
 
   local service_info

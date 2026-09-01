@@ -28,6 +28,16 @@ load test_helper
   [[ "$output" == "https://cdn.example/icon.svg" ]]
 }
 
+@test "homepage_icon: custom default icon for known custom app" {
+  run homepage_icon "yuvomi"
+  [[ "$output" == "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/yuvomi.svg" ]]
+}
+
+@test "homepage_icon: custom default for omnitools uses mdi shorthand" {
+  run homepage_icon "omnitools"
+  [[ "$output" == "mdi:sitemap" ]]
+}
+
 # --- homepage_service_yaml ---
 
 @test "homepage_service_yaml: emits href, icon; no widget for non-gatus" {

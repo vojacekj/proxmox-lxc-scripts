@@ -46,6 +46,11 @@ HEADER
     # that closes the quote (ends with a trailing '"').
     sed -n '/^CATEGORY_MAP="/,/\"$/p' "${repo_root}/dashboard-discover.sh"
 
+    # CUSTOM_ICON_DEFAULTS (assoc array) used by homepage_icon as fallback
+    # icons for apps without a SERVICE_MAP / selfhst slug.
+    sed -n '/^declare -A CUSTOM_ICON_DEFAULTS=(/,/^)/p' "${repo_root}/dashboard-discover.sh" \
+      | sed 's/^declare -A CUSTOM_ICON_DEFAULTS=(/declare -gxA CUSTOM_ICON_DEFAULTS=(/'
+
 
     for fn in normalize_url lookup_service get_icon_url get_port_override get_service_group homepage_icon link_host; do
       sed -n "/^${fn}()/,/^}/p" "${repo_root}/dashboard-discover.sh"
