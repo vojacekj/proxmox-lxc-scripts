@@ -30,5 +30,5 @@ HOMEPAGE_ENABLED="yes"
 # SCAN_PORTS="80,443,8080,8443,3000,5000,8096,8920,9090,8123,7878,8888,9000,9696,5678"
 # Manual port overrides: "name:port name2:port2"
 # PORT_OVERRIDES="myapp:8080 custom:3000"
-# Manual icon overrides: "name:url ..."
-# ICON_OVERRIDES="myapp:https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/docker.svg"
+# Manual icon overrides: "name:url ..." (full URL, or Homepage mdi-/si-/di: shorthand)
+# ICON_OVERRIDES="myapp:https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/docker.svg omnitools:mdi:sitemap"
