@@ -1,0 +1,30 @@
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          severity: warning
+
+  test:
+    name: Bats Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bats
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats
+      - name: Run syntax checks
+        run: |
+          bash -n dashboard-discover.sh
+          bash -n install-avahi-all-lxcs.sh
+      - name: Run bats tests
+        run: bats tests/

@@ -18,7 +18,8 @@ log() {
   shift
   local timestamp
   printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1
-  local message="${timestamp} [${level}] $*"
+  local message
+  message="${timestamp} [${level}] $*"
 
   if [[ "${LOG_STDOUT}" == "yes" ]]; then
     echo "${message}" >&2
@@ -111,8 +112,7 @@ send_gotify() {
 
   # Strip Markdown formatting (Gotify is plain text only)
   local plain_message
-  plain_message=$(echo "$message" | sed 's/\*//g')
-  # Escape JSON special characters
+  plain_message="${message//\*/}"
   plain_message="${plain_message//\\/\\\\}"
   plain_message="${plain_message//\"/\\\"}"
   plain_message="${plain_message//$'\n'/\\n}"

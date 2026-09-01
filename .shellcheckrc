@@ -1,0 +1,5 @@
+# SC1090: Can't follow non-constant source (config files loaded dynamically)
+disable=SC1090
+
+# SC2034: Variable appears unused (SCRIPT_VERSION used for display/logging)
+disable=SC2034
