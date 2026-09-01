@@ -598,10 +598,11 @@ EOF
 # Default icons for apps that have no SERVICE_MAP entry / dedicated selfhst
 # slug. Values are Homepage icon values (sh-/di:/mdi-/full URL).
 declare -A CUSTOM_ICON_DEFAULTS=(
-  ["omnitools"]="mdi:sitemap"
+  ["omnitools"]="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/git.png"
   ["yuvomi"]="https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/yuvomi.svg"
   ["convertx"]="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/convertx.png"
-  ["proxmox-hive"]="mdi:hive"
+  ["proxmox-hive"]="https://cdn.jsdelivr.net/gh/macokay/proxmox-hive@main/client/public/hive.svg"
+  ["proxmox"]="https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/proxmox.svg"
 )
 
 homepage_icon() {

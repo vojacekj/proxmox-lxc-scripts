@@ -33,15 +33,20 @@ load test_helper
   [[ "$output" == "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/yuvomi.svg" ]]
 }
 
-@test "homepage_icon: custom default for omnitools uses mdi shorthand" {
+@test "homepage_icon: custom default for omnitools uses a URL icon" {
   run homepage_icon "omnitools"
-  [[ "$output" == "mdi:sitemap" ]]
+  [[ "$output" == "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/git.png" ]]
 }
 
-@test "homepage_icon: proxmox-hive uses neutral mdi icon, not proxmox logo" {
+@test "homepage_icon: proxmox-hive uses its github logo url" {
   run homepage_icon "proxmox-hive"
-  [[ "$output" == "mdi:hive" ]]
+  [[ "$output" == "https://cdn.jsdelivr.net/gh/macokay/proxmox-hive@main/client/public/hive.svg" ]]
   [[ "$output" != *"proxmox.svg"* ]]
+}
+
+@test "homepage_icon: proxmox uses the proxmox.svg logo" {
+  run homepage_icon "proxmox"
+  [[ "$output" == "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/proxmox.svg" ]]
 }
 
 # --- homepage_service_yaml ---

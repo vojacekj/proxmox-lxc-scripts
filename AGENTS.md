@@ -40,7 +40,7 @@ Proxmox VE helper scripts for LXC container management with Telegram/Gotify noti
 
 - `get_icon_url()` returns full selfhst CDN URLs (used where a raw URL is needed)
 - `homepage_icon()` returns the `sh-<name>` shorthand used by Homepage; slugs are passed through unchanged (dashes/underscores preserved)
-- `CUSTOM_ICON_DEFAULTS` (assoc array) provides fallback icons for known custom apps (omnitools→`mdi:sitemap`, yuvomi, convertx, proxmox-hive→`mdi:hive`) that have no SERVICE_MAP entry / selfhst slug — checked after overrides, before the generic `sh-server` fallback
+- `CUSTOM_ICON_DEFAULTS` (assoc array) provides fallback icons for known custom apps (omnitools→git.png, yuvomi, convertx, proxmox-hive→hive.svg, proxmox→proxmox.svg) that have no SERVICE_MAP entry / selfhst slug — checked after overrides, before the generic `sh-server` fallback. Full CDN URLs are used (not `mdi:` shorthand) because Homepage renders them reliably.
 - Manual `ICON_OVERRIDES` (full URLs) take precedence over both
 
 ### Grouping
