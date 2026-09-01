@@ -267,7 +267,7 @@ declare -A SERVICE_MAP=(
 
   # Communication
   ["matrix"]="matrix:8008"
-  ["gotify"]="gotify:8080"
+  ["gotify"]="gotify:80"
   ["ntfy"]="ntfy:80"
   ["gotosocial"]="gotosocial:8080"
   ["lemmy"]="lemmy:8536"

@@ -22,7 +22,7 @@ load test_helper
 
 @test "lookup_service: direct match 'gotify'" {
   run lookup_service "gotify"
-  [[ "$output" == "gotify:8080"* ]]
+  [[ "$output" == "gotify:80"* ]]
 }
 
 @test "lookup_service: direct match 'home-assistant'" {
