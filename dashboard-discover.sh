@@ -755,6 +755,50 @@ extract_service_names() {
   sed -nE 's/^    - ([^:]+):.*/\1/p' "$file"
 }
 
+# Exit 0 if any `- Group:` header is repeated in a Homepage services.yaml. This
+# catches files corrupted by older merge versions that emitted duplicate groups.
+# Pure.
+homepage_has_dup_groups() {
+  local file="$1"
+  [[ -f "$file" ]] || return 1
+  awk '
+    /^[^ ]/ { g = $0; if (seen[g]) dup = 1; seen[g] = 1 }
+    END { exit (dup ? 0 : 1) }
+  ' "$file"
+}
+
+# Collapse duplicate `- Group:` headers in a Homepage services.yaml into a single
+# header per group, consolidating every service block under the first occurrence
+# of that group name. Output = one clean `- Group:` per group, in first-seen
+# order, with all blocks (including from dropped duplicate headers) preserved
+# verbatim. Only meaningful on files with duplicate headers; a clean file passes
+# through unchanged apart from blank-line normalization.
+# Args: file
+# Stdout: deduplicated YAML.
+dedup_homepage_groups() {
+  awk '
+    function header(line) { return (line ~ /^[^ ]/ && line != "") }
+    {
+      if (header($0)) {
+        cur = $0
+        if (!(cur in ord)) { order[++on] = cur; ord[cur] = 1 }
+        next
+      }
+      if (cur != "" && $0 != "") {
+        g[cur, ++n[cur]] = $0
+      }
+    }
+    END {
+      for (k = 1; k <= on; k++) {
+        gname = order[k]
+        if (k > 1) print ""
+        print gname
+        for (i = 1; i <= n[gname]; i++) print g[gname, i]
+      }
+    }
+  ' "$1"
+}
+
 # --- HOMEPAGE MERGE (add new inside existing group; never rewrite existing) ---
 # The generated Homepage config is merged against the currently deployed one
 # before pushing, like Flame did: anything already present in the live file is
@@ -783,6 +827,17 @@ merge_homepage_yaml() {
   existing_names=$(extract_service_names "$existing")
   local new_file="${TMPDIR:-/tmp}/home-new.$$"
   local spliced_file="${TMPDIR:-/tmp}/home-spliced.$$"
+  local cleaned_file=""
+
+  # Older merge versions could leave duplicate `- Group:` headers in the live
+  # file. Repair that first so the splice/append logic below operates on a clean
+  # structure (one header per group). Clean files pass through with no churn.
+  local base="$existing"
+  if homepage_has_dup_groups "$existing"; then
+    cleaned_file="${TMPDIR:-/tmp}/home-cleaned.$$"
+    dedup_homepage_groups "$existing" > "$cleaned_file"
+    base="$cleaned_file"
+  fi
 
   # Build new-records list: for each generated service whose name isn't already
   # deployed, emit the whole block as `group<TAB>line` records (group is the
@@ -805,8 +860,8 @@ merge_homepage_yaml() {
 
   # Empty new list: the deployed file already has everything. Output verbatim.
   if [[ ! -s "$new_file" ]]; then
-    inject_homepage_sitemonitor "$gen" "$existing"
-    rm -f "$new_file"
+    inject_homepage_sitemonitor "$gen" "$base"
+    rm -f "$new_file" "$cleaned_file" 2>/dev/null
     return 0
   fi
 
@@ -869,9 +924,9 @@ merge_homepage_yaml() {
         }
       }
     }
-  ' "$existing" > "$spliced_file"
+  ' "$base" > "$spliced_file"
   inject_homepage_sitemonitor "$gen" "$spliced_file"
-  rm -f "$new_file" "$spliced_file"
+  rm -f "$new_file" "$spliced_file" "$cleaned_file"
 }
 
 # Add a `siteMonitor:` line to any Homepage service block that lacks it.
@@ -1057,16 +1112,16 @@ merge_gatus_yaml() {
 new_service_names() {
   local gen="$1"
   local existing="$2"
-  comm -13 <(if [[ -n "$existing" && -f "$existing" ]]; then extract_service_names "$existing"; fi) \
-           <(extract_service_names "$gen")
+comm -13 <(if [[ -n "$existing" && -f "$existing" ]]; then extract_service_names "$existing" | sort; fi) \
+         <(extract_service_names "$gen" | sort)
 }
 
 # New endpoint names (Gatus): endpoints in gen not already deployed.
 new_endpoint_names() {
   local gen="$1"
   local existing="$2"
-  comm -13 <(if [[ -n "$existing" && -f "$existing" ]]; then extract_endpoint_names "$existing"; fi) \
-           <(extract_endpoint_names "$gen")
+comm -13 <(if [[ -n "$existing" && -f "$existing" ]]; then extract_endpoint_names "$existing" | sort; fi) \
+         <(extract_endpoint_names "$gen" | sort)
 }
 
 # --- PCT PUSH ---

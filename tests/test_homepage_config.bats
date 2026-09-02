@@ -327,6 +327,83 @@ load test_helper
   rm -f "$gen" "$exist" "$r1"
 }
 
+# --- duplicate group repair ---
+
+@test "homepage_has_dup_groups: detects duplicate group header" {
+  local f
+  f=$(mktemp)
+  printf '%s\n' '- other:' '    - a:' '        href: http://a.local' '- other:' '    - b:' '        href: http://b.local' > "$f"
+  run homepage_has_dup_groups "$f"
+  [ "$status" -eq 0 ]
+  rm -f "$f"
+}
+
+@test "homepage_has_dup_groups: no duplicates exits 1" {
+  local f
+  f=$(mktemp)
+  printf '%s\n' '- other:' '    - a:' '- monitoring:' '    - b:' > "$f"
+  run homepage_has_dup_groups "$f"
+  [ "$status" -eq 1 ]
+  rm -f "$f"
+}
+
+@test "dedup_homepage_groups: collapses duplicate headers, preserves blocks" {
+  local f
+  f=$(mktemp)
+  printf '%s\n' \
+    '- other:' \
+    '    - omnitools:' \
+    '        href: http://omnitools.local' \
+    '- other:' \
+    '    - checkmk:' \
+    '        href: http://checkmk.local' \
+    '- monitoring:' \
+    '    - gatus:' \
+    '- monitoring:' \
+    '    - uptimekuma:' \
+    '        href: http://uptimekuma.local:3001' > "$f"
+  run dedup_homepage_groups "$f"
+  [[ "$(echo "$output" | grep -c '^- other:')" -eq 1 ]]
+  [[ "$(echo "$output" | grep -c '^- monitoring:')" -eq 1 ]]
+  [[ "$output" == *"omnitools"* ]]
+  [[ "$output" == *"checkmk"* ]]
+  [[ "$output" == *"uptimekuma"* ]]
+  rm -f "$f"
+}
+
+@test "merge_homepage_yaml: repairs duplicate groups AND back-fills siteMonitor" {
+  local gen exist
+  gen=$(mktemp); exist=$(mktemp)
+  printf '%s\n' \
+    '- monitoring:' \
+    '    - gatus:' \
+    '        href: http://gatus.local:8080' \
+    '        icon: sh-gatus' \
+    '        description: Discovered from Proxmox LXC' \
+    '        siteMonitor: http://gatus.local:8080' > "$gen"
+  printf '%s\n' \
+    '- other:' \
+    '    - omnitools:' \
+    '        href: http://omnitools.local' \
+    '        icon: https://x/logo.png' \
+    '        description: Discovered from Proxmox LXC' \
+    '- monitoring:' \
+    '    - gatus:' \
+    '        href: http://gatus.local:8080' \
+    '        icon: sh-gatus' \
+    '        description: Discovered from Proxmox LXC' \
+    '- monitoring:' \
+    '    - uptimekuma:' \
+    '        href: http://uptimekuma.local:3001' \
+    '        icon: sh-uptime-kuma' \
+    '        description: Discovered from Proxmox LXC' > "$exist"
+  run merge_homepage_yaml "$gen" "$exist"
+  [[ "$(echo "$output" | grep -c '^- monitoring:')" -eq 1 ]]
+  [[ "$output" == *"siteMonitor: http://gatus.local:8080"* ]]
+  [[ "$output" == *"uptimekuma"* ]]
+  rm -f "$gen" "$exist"
+}
+
 # --- merge_gatus_yaml (only add new) ---
 
 @test "merge_gatus_yaml: keeps existing verbatim, adds only new endpoint" {
