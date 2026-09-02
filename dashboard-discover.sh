@@ -1255,8 +1255,19 @@ kuma_monitor_sql() {
   printf "INSERT INTO monitor \
 (name, type, url, active, interval, retry_interval, maxretries, method, \
 accepted_statuscodes_json, conditions, ignore_tls, upside_down, user_id, weight) \
-VALUES ('%s', 'http', '%s', 1, %s, %s, 0, 'GET', '[\"200-299\"]', '[]', %s, 0, 1, 2000);\n" \
-      "$name" "$url" "$KUMA_INTERVAL" "$KUMA_INTERVAL" "$ignore_tls"
+SELECT '%s', 'http', '%s', 1, %s, %s, 0, 'GET', '[\"200-299\"]', '[]', %s, 0, 1, 2000 \
+WHERE NOT EXISTS (SELECT 1 FROM monitor WHERE name='%s');\n" \
+      "$name" "$url" "$KUMA_INTERVAL" "$KUMA_INTERVAL" "$ignore_tls" "$name"
+}
+
+# Emit the SQL to collapse any duplicate monitors (same name, nonzero count) down
+# to a single row each — keep the lowest id, delete the rest. The `monitor.name`
+# column has no UNIQUE constraint, so a buggy earlier run can leave every monitor
+# duplicated; this repairs that whenever the script runs before syncing. Pure.
+kuma_dedupe_sql() {
+  printf "DELETE FROM monitor WHERE id NOT IN \
+(SELECT MIN(id) FROM monitor GROUP BY name) \
+AND name IN (SELECT name FROM monitor GROUP BY name HAVING COUNT(*) > 1);\n"
 }
 
 # Emit the SQL to find the default group id of a status page (by slug), e.g. for
@@ -1315,6 +1326,10 @@ write_kuma_monitors() {
     log WARN "  KUMA: could not back up ${db_path}; skipping Kuma sync."
     return 0
   fi
+
+  # Repair any duplicate monitors left by earlier buggy runs (keep lowest id
+  # per name), so the below name-based idempotency is reliable going forward.
+  pct exec "$vmid" -- sqlite3 "$db_path" "$(kuma_dedupe_sql)" >/dev/null 2>&1
 
   # Existing monitor names + urls in Kuma (for idempotency: name existence
   # decides UPDATE vs INSERT; url lets us skip rewriting urls already correct).

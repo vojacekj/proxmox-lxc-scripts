@@ -223,6 +223,7 @@ load test_helper
   [[ "$output" == *", 60, 60,"* ]]              # interval + retry_interval
   [[ "$output" == *"'[]'"* ]]                  # conditions (NOT NULL)
   [[ "$output" == *"ignore_tls"* ]]
+  [[ "$output" == *"WHERE NOT EXISTS (SELECT 1 FROM monitor WHERE name='jellyfin')"* ]]
 }
 
 @test "kuma_monitor_sql: uses raw IP when USE_LOCAL_DOMAINS=no" {
@@ -237,7 +238,7 @@ load test_helper
   export USE_LOCAL_DOMAINS="yes"
   run kuma_monitor_sql create "portainer" "https" "10.0.0.8" "9443"
   [[ "$output" == *"'https://portainer.local:9443'"* ]]
-  [[ "$output" == *"'[]', 1, 0, 1, 2000);"* ]]   # conditions='[]', ignore_tls=1
+  [[ "$output" == *"'[]', 1, 0, 1, 2000 WHERE NOT EXISTS"* ]]   # conditions='[]', ignore_tls=1
 }
 
 @test "kuma_monitor_sql: http sets ignore_tls=0, omits default port 80" {
@@ -245,7 +246,7 @@ load test_helper
   export USE_LOCAL_DOMAINS="yes"
   run kuma_monitor_sql create "adguard" "http" "10.0.0.9" "80"
   [[ "$output" == *"'http://adguard.local'"* ]]
-  [[ "$output" == *"'[]', 0, 0, 1, 2000);"* ]]   # conditions='[]', ignore_tls=0
+  [[ "$output" == *"'[]', 0, 0, 1, 2000 WHERE NOT EXISTS"* ]]   # conditions='[]', ignore_tls=0
   [[ "$output" != *":80"* ]]
 }
 
@@ -254,6 +255,13 @@ load test_helper
   export USE_LOCAL_DOMAINS="yes"
   run kuma_monitor_sql update "jellyfin" "http" "10.0.0.5" "8096"
   [[ "$output" == "UPDATE monitor SET url='http://jellyfin.local:8096', ignore_tls=0, active=1 WHERE name='jellyfin';" ]]
+}
+
+@test "kuma_dedupe_sql: emits delete keeping lowest id per duplicated name" {
+  run kuma_dedupe_sql
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == *"DELETE FROM monitor WHERE id NOT IN (SELECT MIN(id) FROM monitor GROUP BY name)"* ]]
+  [[ "$output" == *"HAVING COUNT(*) > 1"* ]]
 }
 
 @test "kuma_status_group_sql: selects default group by slug" {
