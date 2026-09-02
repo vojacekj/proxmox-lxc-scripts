@@ -1206,6 +1206,8 @@ write_gatus_hosts() {
 
 # Emit the SQL to create/update one monitor row for a single service.
 # Pure (testable). Args: create|update  name  protocol  ip  port
+# The monitor url uses the local domain host when USE_LOCAL_DOMAINS=yes (Kuma
+# resolves mDNS, unlike Gatus), else the raw IP.
 kuma_monitor_sql() {
   local mode="$1"
   local name="$2"
@@ -1213,7 +1215,9 @@ kuma_monitor_sql() {
   local ip="$4"
   local port="$5"
 
-  local url="${protocol}://${ip}"
+  local host
+  host=$(link_host "$name" "$ip")
+  local url="${protocol}://${host}"
   [[ "$port" != "80" && "$port" != "443" ]] && url="${url}:${port}"
   local ignore_tls=0
   [[ "$protocol" == "https" ]] && ignore_tls=1

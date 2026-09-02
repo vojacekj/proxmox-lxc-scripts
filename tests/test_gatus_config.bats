@@ -185,35 +185,46 @@ load test_helper
 
 @test "kuma_monitor_sql: create inserts row with interval/baseline fields" {
   export KUMA_INTERVAL="60"
+  export USE_LOCAL_DOMAINS="yes"
   run kuma_monitor_sql create "jellyfin" "http" "10.0.0.5" "8096"
   [ "$status" -eq 0 ]
   [[ "$output" == *"INSERT INTO monitor"* ]]
   [[ "$output" == *"'jellyfin'"* ]]
-  [[ "$output" == *"'http://10.0.0.5:8096'"* ]]
+  [[ "$output" == *"'http://jellyfin.local:8096'"* ]]
   [[ "$output" == *", 60, 60,"* ]]              # interval + retry_interval
   [[ "$output" == *"'[]'"* ]]                  # conditions (NOT NULL)
   [[ "$output" == *"ignore_tls"* ]]
 }
 
+@test "kuma_monitor_sql: uses raw IP when USE_LOCAL_DOMAINS=no" {
+  export KUMA_INTERVAL="60"
+  export USE_LOCAL_DOMAINS="no"
+  run kuma_monitor_sql create "jellyfin" "http" "10.0.0.5" "8096"
+  [[ "$output" == *"'http://10.0.0.5:8096'"* ]]
+}
+
 @test "kuma_monitor_sql: https sets ignore_tls=1" {
   export KUMA_INTERVAL="60"
+  export USE_LOCAL_DOMAINS="yes"
   run kuma_monitor_sql create "portainer" "https" "10.0.0.8" "9443"
-  [[ "$output" == *"'https://10.0.0.8:9443'"* ]]
+  [[ "$output" == *"'https://portainer.local:9443'"* ]]
   [[ "$output" == *"'[]', 1, 0, 1, 2000);"* ]]   # conditions='[]', ignore_tls=1
 }
 
 @test "kuma_monitor_sql: http sets ignore_tls=0, omits default port 80" {
   export KUMA_INTERVAL="60"
+  export USE_LOCAL_DOMAINS="yes"
   run kuma_monitor_sql create "adguard" "http" "10.0.0.9" "80"
-  [[ "$output" == *"'http://10.0.0.9'"* ]]
+  [[ "$output" == *"'http://adguard.local'"* ]]
   [[ "$output" == *"'[]', 0, 0, 1, 2000);"* ]]   # conditions='[]', ignore_tls=0
   [[ "$output" != *":80"* ]]
 }
 
 @test "kuma_monitor_sql: update refreshes url/ignore_tls/active only" {
   export KUMA_INTERVAL="60"
+  export USE_LOCAL_DOMAINS="yes"
   run kuma_monitor_sql update "jellyfin" "http" "10.0.0.5" "8096"
-  [[ "$output" == "UPDATE monitor SET url='http://10.0.0.5:8096', ignore_tls=0, active=1 WHERE name='jellyfin';" ]]
+  [[ "$output" == "UPDATE monitor SET url='http://jellyfin.local:8096', ignore_tls=0, active=1 WHERE name='jellyfin';" ]]
 }
 
 @test "kuma_status_group_sql: selects default group by slug" {
