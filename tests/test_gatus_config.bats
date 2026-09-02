@@ -215,3 +215,20 @@ load test_helper
   run kuma_monitor_sql update "jellyfin" "http" "10.0.0.5" "8096"
   [[ "$output" == "UPDATE monitor SET url='http://10.0.0.5:8096', ignore_tls=0, active=1 WHERE name='jellyfin';" ]]
 }
+
+@test "kuma_status_group_sql: selects default group by slug" {
+  run kuma_status_group_sql "all"
+  [[ "$output" == *'FROM "group" AS g JOIN status_page AS s'* ]]
+  [[ "$output" == *"WHERE s.slug='all'"* ]]
+  [[ "$output" == *"ORDER BY g.id ASC LIMIT 1;"* ]]
+}
+
+@test "kuma_status_group_sql: escapes single quote in slug" {
+  run kuma_status_group_sql "it's"
+  [[ "$output" == *"s.slug='its'"* ]]
+}
+
+@test "kuma_link_sql: inserts monitor-group link guarded by NOT EXISTS" {
+  run kuma_link_sql "12" "3"
+  [[ "$output" == "INSERT INTO monitor_group (monitor_id, group_id, weight, send_url) SELECT 12, 3, 1000, 0 WHERE NOT EXISTS (SELECT 1 FROM monitor_group WHERE monitor_id=12 AND group_id=3);" ]]
+}

@@ -90,6 +90,9 @@ KUMA_DB_PATH="/opt/uptime-kuma/data/kuma.db"
 KUMA_PORT="3001"
 KUMA_INTERVAL="60"
 KUMA_RESTART_SERVICE="yes"
+# Status page (slug in status_page) whose default group receives the discovered
+# monitors so they show up on it. Leave empty to skip linking to a status page.
+KUMA_STATUS_PAGE_SLUG=""
 
 # Homepage
 HOMEPAGE_ENABLED="yes"
@@ -1195,10 +1198,11 @@ write_gatus_hosts() {
 # Because Kuma loads monitors into memory at startup / on Socket.IO events,
 # the Kuma service is restarted after the write so it picks up the change.
 #
-# This touches ONLY the `monitor` table and backs the DB up first. It is
-# considered fragile by Uptime-Kuma upstream ("not recommended"), so it is
-# opt-in via KUMA_ENABLED=yes and guarded; column drift across Kuma versions is
-# possible, and any sqlite3 error is logged and skipped (Gatus keeps working).
+# This touches the `monitor` and (when KUMA_STATUS_PAGE_SLUG is set) `group`/
+# `monitor_group` tables, and backs the DB up first. It is considered fragile by
+# Uptime-Kuma upstream ("not recommended"), so it is opt-in via KUMA_ENABLED=yes
+# and guarded; column drift across Kuma versions is possible, and any sqlite3
+# error is logged and skipped (Gatus keeps working).
 
 # Emit the SQL to create/update one monitor row for a single service.
 # Pure (testable). Args: create|update  name  protocol  ip  port
@@ -1230,9 +1234,34 @@ VALUES ('%s', 'http', '%s', 1, %s, %s, 0, 'GET', '[\"200-299\"]', '[]', %s, 0, 1
       "$name" "$url" "$KUMA_INTERVAL" "$KUMA_INTERVAL" "$ignore_tls"
 }
 
+# Emit the SQL to find the default group id of a status page (by slug), e.g. for
+# the configured KUMA_STATUS_PAGE_SLUG. The default group is the first-created
+# one (lowest id) belonging to that page; status pages always have at least one
+# group, so new monitors can be attached to it to appear on the status page.
+# Pure (testable). Args: slug
+kuma_status_group_sql() {
+  printf "SELECT g.id FROM \"group\" AS g JOIN status_page AS s ON s.id = g.status_page_id \
+WHERE s.slug='%s' ORDER BY g.id ASC LIMIT 1;\n" "${1//\'/''}"
+}
+
+# Emit the SQL to link a monitor to a group (status page membership), unless it is
+# already linked. `monitor_group` has no UNIQUE constraint on (monitor_id, group_id),
+# so guard with NOT EXISTS to stay idempotent.
+# Pure (testable). Args: monitor_id  group_id
+kuma_link_sql() {
+  local mid="$1"
+  local gid="$2"
+  printf "INSERT INTO monitor_group (monitor_id, group_id, weight, send_url) \
+SELECT %s, %s, 1000, 0 \
+WHERE NOT EXISTS (SELECT 1 FROM monitor_group WHERE monitor_id=%s AND group_id=%s);\n" \
+    "$mid" "$gid" "$mid" "$gid"
+}
+
 # Write discovered services into Kuma's SQLite DB inside the Kuma LXC.
 # Args: vmid  db_path  service... (name|proto|ip|port|group)
-# No-op unless sqlite3 is available in the LXC; backs the DB up first.
+# No-op unless sqlite3 is available in the LXC; backs the DB up first. When
+# KUMA_STATUS_PAGE_SLUG is set, each synced monitor is also linked to that status
+# page's default group so it shows up on the page.
 write_kuma_monitors() {
   local vmid="$1"
   local db_path="$2"
@@ -1261,16 +1290,30 @@ write_kuma_monitors() {
   local en
   while IFS= read -r en; do [[ -n "$en" ]] && exist["$en"]=1; done <<< "$existing"
 
-  local added=0 updated=0 failed=0
+  # Resolve the status-page group to link discovered monitors to (so they appear
+  # on the configured status page). Optional; skipped when KUMA_STATUS_PAGE_SLUG
+  # is empty or the page/group can't be found.
+  local page_group_id=""
+  if [[ -n "$KUMA_STATUS_PAGE_SLUG" ]]; then
+    local pg_sql
+    pg_sql=$(kuma_status_group_sql "$KUMA_STATUS_PAGE_SLUG")
+    page_group_id=$(pct exec "$vmid" -- sqlite3 "$db_path" "$pg_sql" 2>/dev/null | tr -d '[:space:]')
+    if [[ -n "$page_group_id" ]]; then
+      log INFO "  Kuma status page '${KUMA_STATUS_PAGE_SLUG}': linking new monitors to group #${page_group_id}."
+    else
+      log WARN "  Kuma status page '${KUMA_STATUS_PAGE_SLUG}' not found; monitors will not be added to a status page."
+    fi
+  fi
+
+  local added=0 updated=0 linked=0 failed=0
   local svc
   for svc in "${services[@]}"; do
     local sname sprotocol sip sport sgroup
     IFS='|' read -r sname sprotocol sip sport sgroup <<< "$svc"
     [[ -z "$sname" || -z "$sip" ]] && continue
 
-    local sql mode
+    local sql
     if [[ -n "${exist[$sname]+x}" ]]; then
-      mode="update"
       sql=$(kuma_monitor_sql update "$sname" "$sprotocol" "$sip" "$sport")
       if pct exec "$vmid" -- sqlite3 "$db_path" "$sql" >/dev/null 2>&1; then
         ((updated++)) || true
@@ -1278,13 +1321,25 @@ write_kuma_monitors() {
         ((failed++)) || true
       fi
     else
-      mode="create"
       sql=$(kuma_monitor_sql create "$sname" "$sprotocol" "$sip" "$sport")
       if pct exec "$vmid" -- sqlite3 "$db_path" "$sql" >/dev/null 2>&1; then
         ((added++)) || true
         exist[$sname]=1
       else
         ((failed++)) || true
+      fi
+    fi
+
+    # Attach the monitor to the status page's default group (idempotent).
+    if [[ -n "$page_group_id" ]]; then
+      local mid sql_link
+      mid=$(pct exec "$vmid" -- sqlite3 "$db_path" \
+        "SELECT id FROM monitor WHERE name='${sname//\'/''}';" 2>/dev/null | tr -d '[:space:]')
+      if [[ -n "$mid" ]]; then
+        sql_link=$(kuma_link_sql "$mid" "$page_group_id")
+        if pct exec "$vmid" -- sqlite3 "$db_path" "$sql_link" >/dev/null 2>&1; then
+          ((linked++)) || true
+        fi
       fi
     fi
   done
@@ -1296,7 +1351,9 @@ write_kuma_monitors() {
       || log WARN "  Kuma: could not restart uptime-kuma (reload may be pending)."
   fi
 
-  log INFO "  Kuma monitor sync: +${added} added, ~${updated} updated, ${failed} failed."
+  local link_note=""
+  [[ -n "$page_group_id" ]] && link_note=" (${linked} linked to status page)"
+  log INFO "  Kuma monitor sync: +${added} added, ~${updated} updated, ${failed} failed${link_note}."
 }
 
 # --- ARGUMENT PARSING ---

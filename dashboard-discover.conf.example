@@ -49,6 +49,8 @@ HOMEPAGE_ENABLED="yes"
 # KUMA_PORT="3001"                # Kuma web port (LXC auto-detect fallback)
 # KUMA_INTERVAL="60"              # monitor check interval (seconds)
 # KUMA_RESTART_SERVICE="yes"      # restart uptime-kuma after writing the DB
+# KUMA_STATUS_PAGE_SLUG="all"     # status page (slug) whose default group new monitors are
+#                                 #   linked to, so they show up on the page; empty to skip
 
 # --- Proxmox host (PVE) service ---
 # The host isn't an LXC and won't be auto-discovered. Set PVE_HOST_IP to add

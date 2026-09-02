@@ -160,6 +160,7 @@ Both Gatus and Homepage reload config automatically — no service restarts requ
 | `KUMA_PORT` | Kuma web port for LXC auto-detect fallback (default `3001`) |
 | `KUMA_INTERVAL` | Monitor check interval in seconds (default `60`) |
 | `KUMA_RESTART_SERVICE` | `yes` to restart `uptime-kuma` after writing the DB (default `yes` — needed to reload monitors) |
+| `KUMA_STATUS_PAGE_SLUG` | Status page (slug) whose default group discovered monitors are linked to, so they appear on the page; leave empty to skip status-page linking |
 | `HOMEPAGE_ENABLED` | Set to `no` to skip Homepage config generation |
 | `HOMEPAGE_LXC_ID` | Auto-detected on first run, or set manually |
 | `HOMEPAGE_CONFIG_DIR` | Config dir inside Homepage LXC (default `/opt/homepage/config`) |
@@ -216,9 +217,10 @@ If the systemd unit already loads `/opt/homepage/.env` via `EnvironmentFile`, ap
 
 **Homepage `siteMonitor` status widgets:** every rendered service card gets a `siteMonitor:` targeting the same `protocol://<link_host>[:port]` as its link. Homepage then attaches a status widget to each card. `siteMonitor` is probed server-side from the Homepage LXC, so it only works with `.local` if that LXC has mDNS. Pick the widget style per service (in `services.yaml`) or globally (in `settings.yaml`): unset = response ms + status, `"dot"` or `"basic"` for a minimal UP/DOWN indicator. (`statusStyle` is a Homepage-side setting you choose; the script does not emit it.)
 
-**Uptime Kuma mirror (trial):** Uptime Kuma has no REST API to create monitors (only a private Socket.IO interface), so this script writes `monitor` rows straight into Kuma's SQLite DB from inside the Kuma LXC:
+**Uptime Kuma mirror (trial):** Uptime Kuma has no REST API to create monitors (only a private Socket.IO interface), so this script writes `monitor` rows straight into Kuma's SQLite DB from inside the Kuma LXC (and links them to a status page if you set `KUMA_STATUS_PAGE_SLUG`):
 - Set `KUMA_ENABLED=yes`, ensure `sqlite3` is installed in the Kuma LXC, and point `KUMA_DB_PATH` at the actual DB location for your install.
-- It backs the DB up (`-backup.db`) before writing, only touches the `monitor` table, and is idempotent: existing monitor names are refreshed (url + `ignore_tls=1` for HTTPS), new ones are inserted, everything else untouched.
+- It backs the DB up (`-backup.db`) before writing, only touches the `monitor` / `group` / `monitor_group` tables, and is idempotent: existing monitor names are refreshed (url + `ignore_tls=1` for HTTPS), new ones are inserted, everything else untouched.
+- With `KUMA_STATUS_PAGE_SLUG` set to your status page's slug, each synced monitor is also linked to that page's default (first-created) group via the `monitor_group` join table, so the new monitors show up on the status page. Point it at the slug of your manually-created "all" page.
 - Kuma loads monitors into memory at startup, so it must be restarted after the write (`KUMA_RESTART_SERVICE=yes`, default) to pick up changes.
 - This is upstream "not recommended" and depends on the exact Kuma DB schema, which can drift between versions. Any sqlite3 failure is logged and skipped — Gatus continues to work regardless.
 
