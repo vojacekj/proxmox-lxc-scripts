@@ -431,6 +431,26 @@ load test_helper
   rm -f "$gen" "$exist"
 }
 
+@test "merge_gatus_yaml: rewrites legacy skipTLSVerify to client.insecure" {
+  local gen exist
+  gen=$(mktemp); exist=$(mktemp)
+  printf '%s\n' 'metrics: true' 'endpoints:' > "$gen"
+  printf '%s\n' \
+    'metrics: true' \
+    'endpoints:' \
+    '  - name: portainer' \
+    '    url: https://192.168.1.210:9443' \
+    '    skipTLSVerify: true' \
+    '    conditions:' \
+    '      - "[CONNECTED] == true"' > "$exist"
+  run merge_gatus_yaml "$gen" "$exist"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" != *"skipTLSVerify"* ]]
+  [[ "$output" == *"    client:"* ]]
+  [[ "$output" == *"      insecure: true"* ]]
+  rm -f "$gen" "$exist"
+}
+
 @test "merge_gatus_yaml: identical generated+existing adds nothing" {
   local gen exist
   gen=$(mktemp); exist=$(mktemp)

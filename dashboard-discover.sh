@@ -1076,7 +1076,7 @@ merge_gatus_yaml() {
   # Existing config verbatim, splicing new blocks under `endpoints:` and
   # rewriting the `url:` of any deployed endpoint whose fresh scan differs.
   NEW_BLOCKS="$new_blocks" FRESH_URLS_FILE="$fresh_urls_file" awk '
-    BEGIN { inserted = 0 }
+    BEGIN { inserted = 0; in_endpoint = 0 }
     /^  - name: / {
       # load fresh url map lazily so any pre-endpoints header is untouched
       if (loaded == 0) {
@@ -1088,6 +1088,7 @@ merge_gatus_yaml() {
         close(ENVIRON["FRESH_URLS_FILE"])
       }
       cur = $3
+      in_endpoint = 1
       print
       next
     }
@@ -1102,6 +1103,18 @@ merge_gatus_yaml() {
       if (!inserted) {
         while ((getline line < ENVIRON["NEW_BLOCKS"]) > 0) print line
         inserted = 1
+      }
+      next
+    }
+    /^    skipTLSVerify: true/ {
+      # Legacy HTTPS endpoints used `skipTLSVerify: true`, which is not a
+      # recognized Gatus field and is silently ignored (self-signed certs then
+      # fail the probe). Rewrite it to the current `client.insecure: true`.
+      if (in_endpoint) {
+        print "    client:"
+        print "      insecure: true"
+      } else {
+        print
       }
       next
     }
