@@ -782,6 +782,7 @@ merge_homepage_yaml() {
   local existing_names
   existing_names=$(extract_service_names "$existing")
   local new_file="${TMPDIR:-/tmp}/home-new.$$"
+  local spliced_file="${TMPDIR:-/tmp}/home-spliced.$$"
 
   # Build new-records list: for each generated service whose name isn't already
   # deployed, emit the whole block as `group<TAB>line` records (group is the
@@ -804,14 +805,15 @@ merge_homepage_yaml() {
 
   # Empty new list: the deployed file already has everything. Output verbatim.
   if [[ ! -s "$new_file" ]]; then
-    cat "$existing"
+    inject_homepage_sitemonitor "$gen" "$existing"
     rm -f "$new_file"
     return 0
   fi
 
   # Splicing pass over the existing file. We emit it verbatim while recording new
   # records per group, then flush them at the end of each existing group and for
-  # any brand-new group at EOF.
+  # any brand-new group at EOF. Output is piped through inject_homepage_sitemonitor
+  # so already-deployed entries that lack a siteMonitor get one added.
   NEW_FILE="$new_file" awk '
     function load_new() {
       if (loaded) return
@@ -867,8 +869,75 @@ merge_homepage_yaml() {
         }
       }
     }
-  ' "$existing"
-  rm -f "$new_file"
+  ' "$existing" > "$spliced_file"
+  inject_homepage_sitemonitor "$gen" "$spliced_file"
+  rm -f "$new_file" "$spliced_file"
+}
+
+# Add a `siteMonitor:` line to any Homepage service block that lacks it.
+# Args: generated_file merged_file  (merged = a Homepage services.yaml)
+# Builds a name->siteMonitor map from the freshly generated file, then walks the
+# merged file (which may be the untouched live config or the spliced output) and
+# inserts `        siteMonitor: <value>` into every service block that doesn't
+# already have one, right after its `description:` line. Existing siteMonitor
+# lines (and every other manual edit: href/icon/widget/description) are left
+# untouched. This is what back-fills the new field onto services that were
+# deployed in earlier runs of the "only add new" merge.
+inject_homepage_sitemonitor() {
+  local gen="$1"
+  local merged="$2"
+
+  # Build name -> siteMonitor from the generated file.
+  local map_file="${TMPDIR:-/tmp}/home-site.$$"
+  GEN="$gen" awk '
+    /^    - [^:]+:/ {
+      name = $2; sub(/:$/, "", name)
+      cur = name
+      next
+    }
+    /^        siteMonitor: / {
+      if (cur != "") { site[cur] = substr($0, index($0, ": ") + 2) }
+    }
+    END { for (n in site) print n "\t" site[n] }
+  ' "$gen" > "$map_file"
+
+  # Walk the merged file and inject where missing.
+  MAP_FILE="$map_file" awk '
+    function load_map() {
+      if (loaded) return
+      loaded = 1
+      while ((getline kv < ENVIRON["MAP_FILE"]) > 0) {
+        split(kv, p, "\t")
+        site[p[1]] = p[2]
+      }
+      close(ENVIRON["MAP_FILE"])
+    }
+    {
+      load_map()
+      if (/^    - [^:]+:/) {
+        name = $2; sub(/:$/, "", name)
+        block = name
+        emitted = 0
+        has_site = 0
+        print
+        next
+      } else if (/^        siteMonitor: /) {
+        if (emitted) { next }   # already injected above description; drop the duplicate
+        print
+        has_site = 1
+        next
+      } else if (/^        description: /) {
+        print
+        if (block != "" && !has_site && !emitted && (block in site)) {
+          print "        siteMonitor: " site[block]
+          emitted = 1
+        }
+        next
+      }
+      print
+    }
+  ' "$merged"
+  rm -f "$map_file"
 }
 
 # --- GATUS MERGE (add new; refresh IPs of known) ---
