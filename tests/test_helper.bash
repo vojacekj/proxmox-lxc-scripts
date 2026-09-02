@@ -52,7 +52,7 @@ HEADER
       | sed 's/^declare -A CUSTOM_ICON_DEFAULTS=(/declare -gxA CUSTOM_ICON_DEFAULTS=(/'
 
 
-    for fn in normalize_url lookup_service get_icon_url get_port_override get_service_group homepage_icon link_host extract_service_names merge_homepage_yaml inject_homepage_sitemonitor homepage_has_dup_groups dedup_homepage_groups extract_endpoint_names extract_endpoint_urls merge_gatus_yaml new_service_names new_endpoint_names kuma_monitor_sql kuma_status_group_sql kuma_link_sql; do
+    for fn in normalize_url lookup_service get_icon_url get_port_override get_service_group homepage_icon link_host extract_service_names merge_homepage_yaml inject_homepage_sitemonitor homepage_has_dup_groups dedup_homepage_groups extract_endpoint_names extract_endpoint_urls merge_gatus_yaml new_service_names new_endpoint_names kuma_monitor_url kuma_monitor_sql kuma_status_group_sql kuma_link_sql; do
       sed -n "/^${fn}()/,/^}/p" "${repo_root}/dashboard-discover.sh"
       echo ''
     done

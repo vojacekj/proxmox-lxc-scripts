@@ -116,14 +116,17 @@ load test_helper
   [[ "$output" != *":443"* ]]
 }
 
-@test "gatus_endpoint_yaml: skipTLSVerify on https endpoint" {
+@test "gatus_endpoint_yaml: client.insecure on https endpoint" {
   run gatus_endpoint_yaml "portainer" "https" "10.0.0.8" "9443" "infrastructure"
-  [[ "$output" == *"skipTLSVerify: true"* ]]
+  [[ "$output" == *"client:"* ]]
+  [[ "$output" == *"insecure: true"* ]]
+  [[ "$output" != *"skipTLSVerify"* ]]
 }
 
-@test "gatus_endpoint_yaml: no skipTLSVerify on http endpoint" {
+@test "gatus_endpoint_yaml: no client.insecure on http endpoint" {
   run gatus_endpoint_yaml "jellyfin" "http" "10.0.0.5" "8096" "media"
-  [[ "$output" != *"skipTLSVerify"* ]]
+  [[ "$output" != *"client:"* ]]
+  [[ "$output" != *"insecure"* ]]
 }
 
 @test "gatus_endpoint_yaml: no alerts block when no creds and alerting disabled" {
@@ -179,6 +182,32 @@ load test_helper
   run gatus_endpoint_yaml "jellyfin" "http" "10.0.0.5" "8096" "media"
   [[ "$output" == *"type: telegram"* ]]
   [[ "$output" == *"type: gotify"* ]]
+}
+
+# --- kuma_monitor_url ---
+
+@test "kuma_monitor_url: local domain host when USE_LOCAL_DOMAINS=yes" {
+  export USE_LOCAL_DOMAINS="yes"
+  run kuma_monitor_url "proxmox" "https" "192.168.1.238" "8006"
+  [[ "$output" == "https://proxmox.local:8006" ]]
+}
+
+@test "kuma_monitor_url: real_host overrides display name for .local" {
+  export USE_LOCAL_DOMAINS="yes"
+  run kuma_monitor_url "proxmox" "https" "192.168.1.238" "8006" "pve01"
+  [[ "$output" == "https://pve01.local:8006" ]]
+}
+
+@test "kuma_monitor_url: raw ip when USE_LOCAL_DOMAINS=no" {
+  export USE_LOCAL_DOMAINS="no"
+  run kuma_monitor_url "proxmox" "https" "192.168.1.238" "8006"
+  [[ "$output" == "https://192.168.1.238:8006" ]]
+}
+
+@test "kuma_monitor_url: omits default port 80/443" {
+  export USE_LOCAL_DOMAINS="yes"
+  run kuma_monitor_url "adguard" "http" "10.0.0.9" "80"
+  [[ "$output" == "http://adguard.local" ]]
 }
 
 # --- kuma_monitor_sql ---

@@ -112,6 +112,10 @@ USE_LOCAL_DOMAINS="yes"
 PVE_HOST_IP=""
 PVE_HOST_NAME="proxmox"
 PVE_HOST_PORT="8006"
+# Real mDNS hostname of the PVE host (its `.local` name). Derived from the host's
+# own hostname (pve01 -> pve01.local) because `PVE_HOST_NAME` ("proxmox") is only
+# a display label and differs from the host's actual avahi/mDNS name.
+PVE_HOST_REAL_NAME="${HOSTNAME%%.*}"
 
 if [[ -f "$CONF_FILE" ]]; then
   secure_source "$CONF_FILE"
@@ -592,10 +596,12 @@ gatus_endpoint_yaml() {
 EOF
   # HTTPS endpoints (e.g. Portainer behind a self-signed cert) would fail TLS
   # validation by default; skip cert verification so the `[CONNECTED]` check
-  # succeeds the way a browser tolerating the cert would.
+  # succeeds the way a browser tolerating the cert would. Gatus uses
+  # `client.insecure: true` (skipTLSVerify is not a recognized endpoint field).
   if [[ "$protocol" == "https" ]]; then
     cat <<EOF
-    skipTLSVerify: true
+    client:
+      insecure: true
 EOF
   fi
   cat <<EOF
@@ -695,13 +701,16 @@ homepage_icon() {
 }
 
 # Human-facing host to show in Homepage links. With USE_LOCAL_DOMAINS=yes
-# this is the avahi/mDNS hostname (name.local, matching the old Flame script);
-# otherwise it falls back to the raw container IP.
+# this is the avahi/mDNS hostname (<local_name>.local, matching the old Flame
+# script); otherwise it falls back to the raw container IP. `local_name` is the
+# service's real mDNS hostname and defaults to `name` — it only differs for the
+# PVE host, whose display label ("proxmox") is not its actual hostname.
 link_host() {
   local name="$1"
   local ip="$2"
+  local local_name="${3:-$name}"
   if [[ "$USE_LOCAL_DOMAINS" == "yes" ]]; then
-    printf '%s.local' "${name,,}"
+    printf '%s.local' "${local_name,,}"
   else
     printf '%s' "$ip"
   fi
@@ -721,9 +730,10 @@ homepage_service_yaml() {
   local port="$4"
   local icon="$5"
   local gatus_url="$6"
+  local real_host="${7:-$name}"
 
   local host
-  host=$(link_host "$name" "$ip")
+  host=$(link_host "$name" "$ip" "$real_host")
   local href="${protocol}://${host}"
   [[ "$port" != "80" && "$port" != "443" ]] && href="${href}:${port}"
 
@@ -1172,10 +1182,10 @@ write_gatus_hosts() {
     echo "::1 localhost ip6-localhost ip6-loopback"
     local svc
     for svc in "${services[@]}"; do
-      local sname sprotocol sip sport sgroup
-      IFS='|' read -r sname sprotocol sip sport sgroup <<< "$svc"
+      local sname sprotocol sip sport sgroup srealhost
+      IFS='|' read -r sname sprotocol sip sport sgroup srealhost <<< "$svc"
       [[ -z "$sname" || -z "$sip" ]] && continue
-      echo "${sip} ${sname} ${sname}.local"
+      echo "${sip} ${sname} ${srealhost:-$sname}.local"
     done
   } > "$hosts_file"
 
@@ -1205,25 +1215,41 @@ write_gatus_hosts() {
 # error is logged and skipped (Gatus keeps working).
 
 # Emit the SQL to create/update one monitor row for a single service.
-# Pure (testable). Args: create|update  name  protocol  ip  port
+# Pure (testable). Args: create|update  name  protocol  ip  port  real_host
 # The monitor url uses the local domain host when USE_LOCAL_DOMAINS=yes (Kuma
-# resolves mDNS, unlike Gatus), else the raw IP.
+# resolves mDNS, unlike Gatus), else the raw IP. `real_host` is the service's
+# real mDNS hostname (defaults to name) — only the PVE host differs.
+
+# Compute the exact monitor url string for a service: protocol://<host>[:port],
+# omitting default ports 80/443. Pure (testable), reused by kuma_monitor_sql and
+# by write_kuma_monitors to skip rewriting urls that are already correct.
+kuma_monitor_url() {
+  local name="$1"
+  local protocol="$2"
+  local ip="$3"
+  local port="$4"
+  local real_host="${5:-$name}"
+  local host
+  host=$(link_host "$name" "$ip" "$real_host")
+  local url="${protocol}://${host}"
+  [[ "$port" != "80" && "$port" != "443" ]] && url="${url}:${port}"
+  printf '%s' "${url//\'/''}"
+}
+
 kuma_monitor_sql() {
   local mode="$1"
   local name="$2"
   local protocol="$3"
   local ip="$4"
   local port="$5"
+  local real_host="${6:-$name}"
 
-  local host
-  host=$(link_host "$name" "$ip")
-  local url="${protocol}://${host}"
-  [[ "$port" != "80" && "$port" != "443" ]] && url="${url}:${port}"
+  local url
+  url=$(kuma_monitor_url "$name" "$protocol" "$ip" "$port" "$real_host")
   local ignore_tls=0
   [[ "$protocol" == "https" ]] && ignore_tls=1
-  # escape single quotes inside the name/url for SQL
+  # escape single quotes inside the name for SQL
   name=${name//\'/''}
-  url=${url//\'/''}
 
   if [[ "$mode" == "update" ]]; then
     printf "UPDATE monitor SET url='%s', ignore_tls=%s, active=1 WHERE name='%s';\n" \
@@ -1295,12 +1321,19 @@ write_kuma_monitors() {
     return 0
   fi
 
-  # Existing monitor names in Kuma (for idempotency).
+  # Existing monitor names + urls in Kuma (for idempotency: name existence
+  # decides UPDATE vs INSERT; url lets us skip rewriting urls already correct).
   local existing
-  existing=$(pct exec "$vmid" -- sqlite3 "$db_path" "SELECT name FROM monitor;" 2>/dev/null)
+  existing=$(pct exec "$vmid" -- sqlite3 "$db_path" "SELECT name || '\t' || url FROM monitor;" 2>/dev/null)
   local -A exist=()
-  local en
-  while IFS= read -r en; do [[ -n "$en" ]] && exist["$en"]=1; done <<< "$existing"
+  local -A cur_url=()
+  local en eu
+  while IFS=$'\t' read -r en eu; do
+    if [[ -n "$en" ]]; then
+      exist["$en"]=1
+      [[ -n "$eu" ]] && cur_url["$en"]="$eu"
+    fi
+  done <<< "$existing"
 
   # Resolve the status-page group to link discovered monitors to (so they appear
   # on the configured status page). Optional; skipped when KUMA_STATUS_PAGE_SLUG
@@ -1317,23 +1350,31 @@ write_kuma_monitors() {
     fi
   fi
 
-  local added=0 updated=0 linked=0 failed=0
+  local added=0 updated=0 linked=0 unchanged=0 failed=0
   local svc
   for svc in "${services[@]}"; do
-    local sname sprotocol sip sport sgroup
-    IFS='|' read -r sname sprotocol sip sport sgroup <<< "$svc"
+    local sname sprotocol sip sport sgroup srealhost
+    IFS='|' read -r sname sprotocol sip sport sgroup srealhost <<< "$svc"
     [[ -z "$sname" || -z "$sip" ]] && continue
 
-    local sql
+    local sql=""
     if [[ -n "${exist[$sname]+x}" ]]; then
-      sql=$(kuma_monitor_sql update "$sname" "$sprotocol" "$sip" "$sport")
-      if pct exec "$vmid" -- sqlite3 "$db_path" "$sql" >/dev/null 2>&1; then
-        ((updated++)) || true
+      # Skip rewriting when the stored url already matches what we'd write
+      # (so a re-run with unchanged values doesn't churn the monitor).
+      local want_url
+      want_url=$(kuma_monitor_url "$sname" "$sprotocol" "$sip" "$sport" "$srealhost")
+      if [[ "${cur_url[$sname]-}" == "$want_url" ]]; then
+        ((unchanged++)) || true
       else
-        ((failed++)) || true
+        sql=$(kuma_monitor_sql update "$sname" "$sprotocol" "$sip" "$sport" "$srealhost")
+        if pct exec "$vmid" -- sqlite3 "$db_path" "$sql" >/dev/null 2>&1; then
+          ((updated++)) || true
+        else
+          ((failed++)) || true
+        fi
       fi
     else
-      sql=$(kuma_monitor_sql create "$sname" "$sprotocol" "$sip" "$sport")
+      sql=$(kuma_monitor_sql create "$sname" "$sprotocol" "$sip" "$sport" "$srealhost")
       if pct exec "$vmid" -- sqlite3 "$db_path" "$sql" >/dev/null 2>&1; then
         ((added++)) || true
         exist[$sname]=1
@@ -1365,7 +1406,7 @@ write_kuma_monitors() {
 
   local link_note=""
   [[ -n "$page_group_id" ]] && link_note=" (${linked} linked to status page)"
-  log INFO "  Kuma monitor sync: +${added} added, ~${updated} updated, ${failed} failed${link_note}."
+  log INFO "  Kuma monitor sync: +${added} added, ~${updated} updated, ${unchanged} unchanged, ${failed} failed${link_note}."
 }
 
 # --- ARGUMENT PARSING ---
@@ -1615,7 +1656,7 @@ main() {
   if [[ -n "$PVE_HOST_IP" ]]; then
     if [[ ",${SKIP_APPS}," != *",${PVE_HOST_NAME},"* ]]; then
       log INFO "Adding Proxmox host (${PVE_HOST_NAME}) at ${PVE_HOST_IP}:${PVE_HOST_PORT}"
-      services+=("${PVE_HOST_NAME}|https|${PVE_HOST_IP}|${PVE_HOST_PORT}|infrastructure")
+      services+=("${PVE_HOST_NAME}|https|${PVE_HOST_IP}|${PVE_HOST_PORT}|infrastructure|${PVE_HOST_REAL_NAME}")
       names+=("$PVE_HOST_NAME")
       ((added++)) || true
     fi
@@ -1703,7 +1744,7 @@ main() {
     local -A sections=()
     local -a section_order=()
     for svc in "${services[@]}"; do
-      IFS='|' read -r sname sprotocol sip sport sgroup <<< "$svc"
+      IFS='|' read -r sname sprotocol sip sport sgroup srealhost <<< "$svc"
       local section="${sgroup:-other}"
       if [[ -z "${sections[$section]+x}" ]]; then
         sections[$section]=1
@@ -1714,14 +1755,14 @@ main() {
     for section in "${section_order[@]}"; do
       echo "- ${section}:" >> "$homepage_file"
       for svc in "${services[@]}"; do
-        IFS='|' read -r sname sprotocol sip sport sgroup <<< "$svc"
+        IFS='|' read -r sname sprotocol sip sport sgroup srealhost <<< "$svc"
         local this_section="${sgroup:-other}"
         if [[ "$this_section" != "$section" ]]; then
           continue
         fi
         local icon
         icon=$(homepage_icon "$sname")
-        homepage_service_yaml "$sname" "$sprotocol" "$sip" "$sport" "$icon" "$HOMEPAGE_GATUS_URL" >> "$homepage_file"
+        homepage_service_yaml "$sname" "$sprotocol" "$sip" "$sport" "$icon" "$HOMEPAGE_GATUS_URL" "$srealhost" >> "$homepage_file"
       done
     done
 
