@@ -17,6 +17,10 @@ GATUS_ENABLED="yes"
 # GATUS_ALERTING="yes"            # generate alerting block from telegram/gotify conf
 # GATUS_RESTART_SERVICE="no"
 # GATUS_PORT="8080"               # Gatus listen port (used in Homepage widget URL)
+#
+# On every run the discovered endpoint urls are refreshed from a fresh scan and
+# the raw IPs kept current, and (when USE_LOCAL_DOMAINS=yes) the LXC /etc/hosts
+# is rewritten so Gatus can resolve `name.local` (Go ignores mDNS/NSS).
 
 # --- Homepage ---
 # Homepage runs as an LXC (community script ct/homepage.sh). It hot-reloads
@@ -26,6 +30,25 @@ HOMEPAGE_ENABLED="yes"
 # HOMEPAGE_CONFIG_DIR="/opt/homepage/config"
 # HOMEPAGE_SERVICES_FILE="services.yaml"
 # USE_LOCAL_DOMAINS="yes"          # yes = link services as name.local (mDNS); no = raw IPs
+#
+# Every service card gets a `siteMonitor:` (server-side probe from the Homepage
+# LXC) targeting the same name.local/raw-IP href. Homepage then auto-adds a
+# status widget to each card. Choose statusStyle per service in services.yaml
+# (default: response ms + status; "dot" or "basic" for minimal) or globally in
+# settings.yaml.
+
+# --- Uptime Kuma (trial, optional) ---
+# Mirrors discovered services into Uptime Kuma as monitors by editing its
+# SQLite DB directly from inside the Kuma LXC (Kuma has no REST create API).
+# Requires sqlite3 in the LXC; the DB is backed up before each write and the
+# service restarted so Kuma reloads monitors (it loads them into memory). This
+# is opt-in and considered fragile upstream; leave KUMA_ENABLED="no" to disable.
+# KUMA_ENABLED="no"
+# KUMA_LXC_ID=""                  # leave empty + first run to auto-detect by name "kuma"
+# KUMA_DB_PATH="/opt/uptime-kuma/data/kuma.db"
+# KUMA_PORT="3001"                # Kuma web port (LXC auto-detect fallback)
+# KUMA_INTERVAL="60"              # monitor check interval (seconds)
+# KUMA_RESTART_SERVICE="yes"      # restart uptime-kuma after writing the DB
 
 # --- Proxmox host (PVE) service ---
 # The host isn't an LXC and won't be auto-discovered. Set PVE_HOST_IP to add

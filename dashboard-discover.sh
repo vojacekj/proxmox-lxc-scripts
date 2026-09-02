@@ -80,6 +80,17 @@ GATUS_ALERTING="yes"
 GATUS_RESTART_SERVICE="no"
 GATUS_PORT="8080"
 
+# Uptime Kuma (trial/side-by-side backend). Auto-managed by writing monitor rows
+# directly into Kuma's SQLite DB (see write_kuma_monitors). This is opt-in and
+# separate from Gatus: set KUMA_ENABLED=yes to also mirror discovered services
+# into Kuma for evaluation.
+KUMA_ENABLED="no"
+KUMA_LXC_ID=""
+KUMA_DB_PATH="/opt/uptime-kuma/data/kuma.db"
+KUMA_PORT="3001"
+KUMA_INTERVAL="60"
+KUMA_RESTART_SERVICE="yes"
+
 # Homepage
 HOMEPAGE_ENABLED="yes"
 HOMEPAGE_LXC_ID=""
@@ -713,11 +724,18 @@ homepage_service_yaml() {
   local href="${protocol}://${host}"
   [[ "$port" != "80" && "$port" != "443" ]] && href="${href}:${port}"
 
+  # siteMonitor: Homepage makes a server-side HEAD request to show a live
+  # up/down badge on the card. Uses the same host as href (name.local when
+  # USE_LOCAL_DOMAINS=yes, matching how the browser reaches the service).
+  local monitor="${protocol}://${host}"
+  [[ "$port" != "80" && "$port" != "443" ]] && monitor="${monitor}:${port}"
+
   cat <<EOF
     - ${name}:
         href: ${href}
         icon: ${icon}
         description: Discovered from Proxmox LXC
+        siteMonitor: ${monitor}
 EOF
   if [[ "$name" == "gatus" ]]; then
     cat <<EOF
@@ -737,74 +755,135 @@ extract_service_names() {
   sed -nE 's/^    - ([^:]+):.*/\1/p' "$file"
 }
 
-# --- HOMEPAGE MERGE (only add new; never modify existing) ---
+# --- HOMEPAGE MERGE (add new inside existing group; never rewrite existing) ---
 # The generated Homepage config is merged against the currently deployed one
 # before pushing, like Flame did: anything already present in the live file is
 # left completely untouched, and only services this run discovered but that
-# aren't in the live file yet are added (each under its group). This keeps
-# manual edits and keeps Homepage from reloading on unchanged files.
+# aren't in the live file yet are added. Each new service is inserted *inside*
+# its group — if that group already exists in the deployed file the block is
+# appended after that group's last service, otherwise a brand-new `- Group:`
+# header is added at the end. This avoids emitting a repeated `- Group:`
+# header (which previously produced duplicate categories that Homepage's
+# same-name group merge rendered incorrectly). Manual edits stay preserved and
+# unchanged files don't churn Homepage reloads.
 #
 # Args: generated_file existing_file  (existing_file may be empty/unset)
 # Stdout: merged YAML.
-#
-# Algorithm:
-#   - names(existing) = service names already deployed.
-#   - names(gen)      = service names this run generated.
-#   - new = names(gen) not in names(existing).
-#   - Base output = the existing file verbatim (if any).
-#   - Insert each new generated block under its group: if that group header
-#     already exists in the base, append the block there; else add a new group.
 merge_homepage_yaml() {
   local gen="$1"
   local existing="$2"
 
-  # 1) Deployed file, untouched.
-  [[ -f "$existing" ]] && cat "$existing"
+  # No existing config yet: use the generated file as-is.
+  if [[ ! -f "$existing" ]]; then
+    cat "$gen"
+    return 0
+  fi
 
-  # 2) Newly-discovered blocks (name not already deployed) under their group.
-  #    Homepage merges same-named groups, so a repeated `- Group:` header just
-  #    groups these appended services together.
-  if [[ -f "$existing" ]]; then
-    local existing_names
-    existing_names=$(extract_service_names "$existing")
-    EX_NAMES="$existing_names" awk '
-      BEGIN {
-        split(ENVIRON["EX_NAMES"], n, "\n")
-        for (i in n) if (n[i] != "") ex[n[i]] = 1
+  local existing_names
+  existing_names=$(extract_service_names "$existing")
+  local new_file="${TMPDIR:-/tmp}/home-new.$$"
+
+  # Build new-records list: for each generated service whose name isn't already
+  # deployed, emit the whole block as `group<TAB>line` records (group is the
+  # generated group header). Used both for splicing into existing groups and
+  # for appending brand-new groups at the end.
+  EX_NAMES="$existing_names" awk '
+    BEGIN { split(ENVIRON["EX_NAMES"], n, "\n"); for (i in n) if (n[i] != "") ex[n[i]] = 1 }
+    /^[^ ]/ { group = $0; next }
+    /^    - [^:]+:/ {
+      name = $2; sub(/:$/, "", name)
+      keep = !(name in ex)
+      block = 1
+      if (keep) print group "\t" $0
+      next
+    }
+    {
+      if (block && keep) print group "\t" $0
+    }
+  ' "$gen" > "$new_file"
+
+  # Empty new list: the deployed file already has everything. Output verbatim.
+  if [[ ! -s "$new_file" ]]; then
+    cat "$existing"
+    rm -f "$new_file"
+    return 0
+  fi
+
+  # Splicing pass over the existing file. We emit it verbatim while recording new
+  # records per group, then flush them at the end of each existing group and for
+  # any brand-new group at EOF.
+  NEW_FILE="$new_file" awk '
+    function load_new() {
+      if (loaded) return
+      loaded = 1
+      while ((getline rec < ENVIRON["NEW_FILE"]) > 0) {
+        split(rec, parts, "\t")
+        g = parts[1]
+        line = substr(rec, length(parts[1]) + 2)  # strip the TAB and group prefix
+        seen_new[g] = 1
+        q[g, ++n[g]] = line
+        order[++on] = g
       }
-      /^[^ ]/ { group = $0; next }
-      /^    - [^:]+:/ {
-        name = $2; sub(/:$/, "", name)
-        keep = !(name in ex)
-        if (keep) {
-          # open this group for appended services (once per generated group)
-          if (group != cur_group) {
-            if (cur_group != "") print ""
-            print group
-            cur_group = group
-          }
-          print
-          block = 1
-        } else {
-          block = 0
-        }
+      close(ENVIRON["NEW_FILE"])
+    }
+    function flush_group() {
+      if (cur != "" && n[cur] > 0) {
+        for (i = 1; i <= n[cur]; i++) print q[cur, i]
+        delete n[cur]
+        printed[cur] = 1
+      }
+    }
+    function is_header(line) {
+      return (line ~ /^[^ ]/ && line != "")
+    }
+    load_new()
+    {
+      line = $0
+      if (is_header(line)) {
+        flush_group()
+        cur = line
+        present[cur] = 1
+        gflush = 1
+        print
+        next
+      } else {
+        # not a header: just print (service line or property under current group)
+        if (gflush) { gflush = 0 }
+        print
+        if (cur != "") tail[cur] = tail[cur] "\n" line
         next
       }
-      { if (block) print }
-    ' "$gen" > "${TMPDIR:-/tmp}/home-new.$$"
-    cat "${TMPDIR:-/tmp}/home-new.$$"
-    rm -f "${TMPDIR:-/tmp}/home-new.$$"
-  else
-    # No existing config: use the generated file as-is.
-    cat "$gen"
-  fi
+    }
+    END {
+      flush_group()
+      # append any new service groups that are not present in the deployed file
+      for (k = 1; k <= on; k++) {
+        g = order[k]
+        if (!(g in present) && n[g] > 0) {
+          print ""
+          print g
+          for (i = 1; i <= n[g]; i++) print q[g, i]
+          delete n[g]
+        }
+      }
+    }
+  ' "$existing"
+  rm -f "$new_file"
 }
 
-# --- GATUS MERGE (only add new; never modify existing) ---
+# --- GATUS MERGE (add new; refresh IPs of known) ---
 # Gatus config is overwritten each run too. Like the Homepage merge (and the
 # old Flame tool), anything already in the live config is left untouched and
 # only endpoint blocks this run discovered but that aren't deployed yet are
 # added under the single `endpoints:` list.
+#
+# Additionally, for endpoints that ARE already deployed we still refresh the
+# `url:` (and `group:`) line from this run's fresh scan. This keeps Gatus
+# monitoring the current IP when a container's lease/address changes between
+# cron runs — important because the script is intended to run on a schedule.
+# Every other field (conditions, alerts, etc.) is preserved verbatim, so the
+# merge never overwrites manual tuning. If the IP is unchanged the file is
+# byte-identical (no reload churn).
 
 # Print endpoint names (the `  - name:` lines) from a generated Gatus config.
 extract_endpoint_names() {
@@ -813,10 +892,24 @@ extract_endpoint_names() {
   sed -nE 's/^  - name: *([^ ]+).*/\1/p' "$file"
 }
 
+# Build a "name -> url" map (newline-delimited `name\turl` lines) from a
+# generated config; used to refresh the url of already-deployed endpoints.
+# A URL may contain colons/space-adjacent chars, but never a tab.
+extract_endpoint_urls() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  awk '
+    /^  - name: *([^ ]+)/ { name = $3 }
+    /^    url: / && name != "" { print name "\t" $2; name = "" }
+  ' "$file"
+}
+
 # Merge a generated Gatus config.yaml with the existing one. $2 may be
 # empty/unset (no existing). Stdout: merged YAML.
 #
 #   - existing endpoints kept verbatim (header + all deployed checks)
+#   - for known deployed endpoints, refresh only the `url:`/`group:` value
+#     when this run discovered a different one
 #   - newly-generated endpoint blocks (name not already deployed) spliced in
 #     right under the `endpoints:` line
 merge_gatus_yaml() {
@@ -828,8 +921,10 @@ merge_gatus_yaml() {
     return 0
   fi
 
-  local existing_names new_blocks
+  local existing_names new_blocks fresh_urls_file
   existing_names=$(extract_endpoint_names "$existing")
+  fresh_urls_file="${TMPDIR:-/tmp}/gatus-fresh-urls.$$"
+  extract_endpoint_urls "$gen" > "$fresh_urls_file"
   new_blocks="${TMPDIR:-/tmp}/gatus-new.$$"
   # New blocks = generated endpoint blocks whose name isn't deployed yet.
   EX_NAMES="$existing_names" awk '
@@ -846,9 +941,30 @@ merge_gatus_yaml() {
     { if (block) print }
   ' "$gen" > "$new_blocks"
 
-  # Existing config verbatim; splice new blocks under the `endpoints:` line.
-  NEW_BLOCKS="$new_blocks" awk '
+  # Existing config verbatim, splicing new blocks under `endpoints:` and
+  # rewriting the `url:` of any deployed endpoint whose fresh scan differs.
+  NEW_BLOCKS="$new_blocks" FRESH_URLS_FILE="$fresh_urls_file" awk '
     BEGIN { inserted = 0 }
+    /^  - name: / {
+      # load fresh url map lazily so any pre-endpoints header is untouched
+      if (loaded == 0) {
+        loaded = 1
+        while ((getline line < ENVIRON["FRESH_URLS_FILE"]) > 0) {
+          split(line, kv, "\t")
+          fresh[kv[1]] = kv[2]
+        }
+        close(ENVIRON["FRESH_URLS_FILE"])
+      }
+      cur = $3
+      print
+      next
+    }
+    /^    url: / && cur != "" {
+      if (cur in fresh) print "    url: " fresh[cur]
+      else print
+      cur = ""
+      next
+    }
     /^endpoints:/ {
       print
       if (!inserted) {
@@ -860,7 +976,7 @@ merge_gatus_yaml() {
     { print }
   ' "$existing"
 
-  rm -f "$new_blocks"
+  rm -f "$new_blocks" "$fresh_urls_file"
 }
 
 # --- NOTIFICATION HELPERS ---
@@ -903,6 +1019,160 @@ pct_push() {
   fi
   pct exec "$vmid" -- chmod "$perms" "$remote_path" &>/dev/null
   return 0
+}
+
+# --- GATUS /etc/hosts SYNC ---
+# Gatus is a static Go binary whose resolver does not implement mDNS, so
+# `*.local` names won't resolve via avahi/NSS (confirmed on host). However Go's
+# resolver DOES read /etc/hosts. So we write a hosts file into the Gatus LXC
+# mapping each discovered `name.local` (and bare `name`) to its current IP each
+# run. This lets Gatus resolve `.local` reliably and keeps the mapping fresh on
+# cron (an IP change is reflected next run).
+#
+# Pushes the *whole* hosts file, preserving the standard 127.0.0.1 / ::1 lines
+# plus our generated hostname->IP entries. Respects USE_LOCAL_DOMAINS; no-op
+# when USE_LOCAL_DOMAINS!=yes.
+write_gatus_hosts() {
+  local vmid="$1"
+  shift
+  local -a services=("$@")
+
+  [[ "$USE_LOCAL_DOMAINS" != "yes" ]] && return 0
+
+  local hosts_file="${TMPDIR:-/tmp}/gatus-hosts.$$"
+  {
+    echo "127.0.0.1 localhost"
+    echo "::1 localhost ip6-localhost ip6-loopback"
+    local svc
+    for svc in "${services[@]}"; do
+      local sname sprotocol sip sport sgroup
+      IFS='|' read -r sname sprotocol sip sport sgroup <<< "$svc"
+      [[ -z "$sname" || -z "$sip" ]] && continue
+      echo "${sip} ${sname} ${sname}.local"
+    done
+  } > "$hosts_file"
+
+  if pct_push "$vmid" "$hosts_file" "/etc/hosts" "0644"; then
+    log INFO "  Synced Gatus /etc/hosts (${#services[@]} host mappings)."
+  else
+    log ERROR "  Could not sync Gatus /etc/hosts."
+    ((failed++)) || true
+  fi
+  rm -f "$hosts_file"
+}
+
+# --- KUMA (Uptime Kuma) MONITOR SYNC ---
+# Uptime Kuma exposes NO official REST endpoint to create monitors (only its
+# private Socket.IO API), so to auto-mirror discovered services we write monitor
+# rows directly into Kuma's SQLite DB (KUMA_DB_PATH) from inside the Kuma LXC.
+# Idempotent and mirrors Gatus "only add new + refresh url":
+#   - a monitor whose name already exists -> UPDATE url/ignore_tls (keep all else)
+#   - a monitor that doesn't exist         -> INSERT the row
+# Because Kuma loads monitors into memory at startup / on Socket.IO events,
+# the Kuma service is restarted after the write so it picks up the change.
+#
+# This touches ONLY the `monitor` table and backs the DB up first. It is
+# considered fragile by Uptime-Kuma upstream ("not recommended"), so it is
+# opt-in via KUMA_ENABLED=yes and guarded; column drift across Kuma versions is
+# possible, and any sqlite3 error is logged and skipped (Gatus keeps working).
+
+# Emit the SQL to create/update one monitor row for a single service.
+# Pure (testable). Args: create|update  name  protocol  ip  port
+kuma_monitor_sql() {
+  local mode="$1"
+  local name="$2"
+  local protocol="$3"
+  local ip="$4"
+  local port="$5"
+
+  local url="${protocol}://${ip}"
+  [[ "$port" != "80" && "$port" != "443" ]] && url="${url}:${port}"
+  local ignore_tls=0
+  [[ "$protocol" == "https" ]] && ignore_tls=1
+  # escape single quotes inside the name/url for SQL
+  name=${name//\'/''}
+  url=${url//\'/''}
+
+  if [[ "$mode" == "update" ]]; then
+    printf "UPDATE monitor SET url='%s', ignore_tls=%s, active=1 WHERE name='%s';\n" \
+      "$url" "$ignore_tls" "$name"
+    return 0
+  fi
+
+  printf "INSERT INTO monitor \
+(name, type, url, active, interval, retry_interval, maxretries, method, \
+accepted_statuscodes_json, conditions, ignore_tls, upside_down, user_id, weight) \
+VALUES ('%s', 'http', '%s', 1, %s, %s, 0, 'GET', '[\"200-299\"]', '[]', %s, 0, 1, 2000);\n" \
+      "$name" "$url" "$KUMA_INTERVAL" "$KUMA_INTERVAL" "$ignore_tls"
+}
+
+# Write discovered services into Kuma's SQLite DB inside the Kuma LXC.
+# Args: vmid  db_path  service... (name|proto|ip|port|group)
+# No-op unless sqlite3 is available in the LXC; backs the DB up first.
+write_kuma_monitors() {
+  local vmid="$1"
+  local db_path="$2"
+  shift 2
+  local -a services=("$@")
+
+  if [[ -z "$vmid" || -z "$db_path" ]]; then
+    log WARN "  KUMA: no LXC/DB path configured; skipping Kuma sync."
+    return 0
+  fi
+  if ! pct exec "$vmid" -- command -v sqlite3 >/dev/null 2>&1; then
+    log WARN "  KUMA: sqlite3 not installed in LXC ${vmid}; skipping Kuma sync."
+    return 0
+  fi
+
+  # Backup the DB before any write.
+  if ! pct exec "$vmid" -- cp "$db_path" "${db_path%.db}-backup.db" 2>/dev/null; then
+    log WARN "  KUMA: could not back up ${db_path}; skipping Kuma sync."
+    return 0
+  fi
+
+  # Existing monitor names in Kuma (for idempotency).
+  local existing
+  existing=$(pct exec "$vmid" -- sqlite3 "$db_path" "SELECT name FROM monitor;" 2>/dev/null)
+  local -A exist=()
+  local en
+  while IFS= read -r en; do [[ -n "$en" ]] && exist["$en"]=1; done <<< "$existing"
+
+  local added=0 updated=0 failed=0
+  local svc
+  for svc in "${services[@]}"; do
+    local sname sprotocol sip sport sgroup
+    IFS='|' read -r sname sprotocol sip sport sgroup <<< "$svc"
+    [[ -z "$sname" || -z "$sip" ]] && continue
+
+    local sql mode
+    if [[ -n "${exist[$sname]+x}" ]]; then
+      mode="update"
+      sql=$(kuma_monitor_sql update "$sname" "$sprotocol" "$sip" "$sport")
+      if pct exec "$vmid" -- sqlite3 "$db_path" "$sql" >/dev/null 2>&1; then
+        ((updated++)) || true
+      else
+        ((failed++)) || true
+      fi
+    else
+      mode="create"
+      sql=$(kuma_monitor_sql create "$sname" "$sprotocol" "$sip" "$sport")
+      if pct exec "$vmid" -- sqlite3 "$db_path" "$sql" >/dev/null 2>&1; then
+        ((added++)) || true
+        exist[$sname]=1
+      else
+        ((failed++)) || true
+      fi
+    fi
+  done
+
+  # Restart Kuma so it reloads monitors into memory from the DB edit.
+  if [[ "$KUMA_RESTART_SERVICE" == "yes" ]]; then
+    pct exec "$vmid" -- systemctl restart uptime-kuma &>/dev/null \
+      && log INFO "  Kuma restarted to reload monitors." \
+      || log WARN "  Kuma: could not restart uptime-kuma (reload may be pending)."
+  fi
+
+  log INFO "  Kuma monitor sync: +${added} added, ~${updated} updated, ${failed} failed."
 }
 
 # --- ARGUMENT PARSING ---
@@ -1046,6 +1316,18 @@ main() {
     log INFO "Homepage LXC: ${HOMEPAGE_LXC_ID}"
   elif [[ "$HOMEPAGE_ENABLED" == "yes" ]]; then
     log INFO "Using Homepage LXC: ${HOMEPAGE_LXC_ID}"
+  fi
+
+  # Resolve Uptime Kuma LXC (trial backend). Optional; only used when enabled.
+  if [[ -z "$KUMA_LXC_ID" || "$DO_DETECT" == "true" ]] && [[ "$KUMA_ENABLED" == "yes" ]]; then
+    if KUMA_LXC_ID=$(find_lxc_by_name "kuma" "$KUMA_PORT" 2>/dev/null); then
+      log INFO "Uptime Kuma LXC: ${KUMA_LXC_ID}"
+    else
+      log WARN "KUMA enabled but no Kuma LXC found; skipping Kuma sync."
+      KUMA_LXC_ID=""
+    fi
+  elif [[ "$KUMA_ENABLED" == "yes" ]]; then
+    log INFO "Using Uptime Kuma LXC: ${KUMA_LXC_ID}"
   fi
 
   # Get running LXC containers
@@ -1199,6 +1481,24 @@ main() {
       fi
     fi
     rm -f "$existing_gatus_yaml" "$gatus_file" "$gatus_merged_file"
+  fi
+
+  # --- Sync Gatus /etc/hosts so `*.local` resolves (Go reads hosts, not mDNS) ---
+  if [[ "$GATUS_ENABLED" == "yes" && -n "$GATUS_LXC_ID" && "$DRY_RUN" != "true" ]]; then
+    write_gatus_hosts "$GATUS_LXC_ID" "${services[@]}"
+  elif [[ "$GATUS_ENABLED" == "yes" && "$DRY_RUN" == "true" && -n "$GATUS_LXC_ID" ]]; then
+    log INFO "  [DRY RUN] Would sync Gatus /etc/hosts with ${#services[@]} host mappings."
+  fi
+
+  # --- Mirror discovered services into Uptime Kuma (trial backend) ---
+  if [[ "$KUMA_ENABLED" == "yes" ]]; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+      log INFO "  [DRY RUN] Would sync ${#services[@]} monitors into Kuma (LXC ${KUMA_LXC_ID:-?})."
+    elif [[ -n "$KUMA_LXC_ID" ]]; then
+      write_kuma_monitors "$KUMA_LXC_ID" "$KUMA_DB_PATH" "${services[@]}"
+    else
+      log WARN "  Kuma enabled but no Kuma LXC resolved; skipping Kuma sync."
+    fi
   fi
 
   # --- Write Homepage config ---

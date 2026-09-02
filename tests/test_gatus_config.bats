@@ -180,3 +180,38 @@ load test_helper
   [[ "$output" == *"type: telegram"* ]]
   [[ "$output" == *"type: gotify"* ]]
 }
+
+# --- kuma_monitor_sql ---
+
+@test "kuma_monitor_sql: create inserts row with interval/baseline fields" {
+  export KUMA_INTERVAL="60"
+  run kuma_monitor_sql create "jellyfin" "http" "10.0.0.5" "8096"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"INSERT INTO monitor"* ]]
+  [[ "$output" == *"'jellyfin'"* ]]
+  [[ "$output" == *"'http://10.0.0.5:8096'"* ]]
+  [[ "$output" == *", 60, 60,"* ]]              # interval + retry_interval
+  [[ "$output" == *"'[]'"* ]]                  # conditions (NOT NULL)
+  [[ "$output" == *"ignore_tls"* ]]
+}
+
+@test "kuma_monitor_sql: https sets ignore_tls=1" {
+  export KUMA_INTERVAL="60"
+  run kuma_monitor_sql create "portainer" "https" "10.0.0.8" "9443"
+  [[ "$output" == *"'https://10.0.0.8:9443'"* ]]
+  [[ "$output" == *"'[]', 1, 0, 1, 2000);"* ]]   # conditions='[]', ignore_tls=1
+}
+
+@test "kuma_monitor_sql: http sets ignore_tls=0, omits default port 80" {
+  export KUMA_INTERVAL="60"
+  run kuma_monitor_sql create "adguard" "http" "10.0.0.9" "80"
+  [[ "$output" == *"'http://10.0.0.9'"* ]]
+  [[ "$output" == *"'[]', 0, 0, 1, 2000);"* ]]   # conditions='[]', ignore_tls=0
+  [[ "$output" != *":80"* ]]
+}
+
+@test "kuma_monitor_sql: update refreshes url/ignore_tls/active only" {
+  export KUMA_INTERVAL="60"
+  run kuma_monitor_sql update "jellyfin" "http" "10.0.0.5" "8096"
+  [[ "$output" == "UPDATE monitor SET url='http://10.0.0.5:8096', ignore_tls=0, active=1 WHERE name='jellyfin';" ]]
+}

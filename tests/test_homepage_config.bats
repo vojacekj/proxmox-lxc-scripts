@@ -69,8 +69,26 @@ load test_helper
   run homepage_service_yaml "jellyfin" "http" "10.0.0.5" "8096" "sh-jellyfin" "http://gatus.local"
   [ "$status" -eq 0 ]
   [[ "$output" == *"href: http://jellyfin.local:8096"* ]]
+  [[ "$output" == *"siteMonitor: http://jellyfin.local:8096"* ]]
   [[ "$output" == *"icon: sh-jellyfin"* ]]
   [[ "$output" != *"widget:"* ]]
+}
+
+@test "homepage_service_yaml: siteMonitor matches href host (including port)" {
+  run homepage_service_yaml "portainer" "https" "10.0.0.8" "9443" "sh-portainer" "http://gatus.local"
+  [[ "$output" == *"siteMonitor: https://portainer.local:9443"* ]]
+}
+
+@test "homepage_service_yaml: siteMonitor omits default ports" {
+  run homepage_service_yaml "adguard" "http" "10.0.0.9" "80" "sh-adguard-home" "http://gatus.local"
+  [[ "$output" == *"siteMonitor: http://adguard.local"* ]]
+  [[ "$output" != *":80"* ]]
+}
+
+@test "homepage_service_yaml: siteMonitor uses IP when USE_LOCAL_DOMAINS=no" {
+  export USE_LOCAL_DOMAINS="no"
+  run homepage_service_yaml "jellyfin" "http" "10.0.0.5" "8096" "sh-jellyfin" "http://gatus.local"
+  [[ "$output" == *"siteMonitor: http://10.0.0.5:8096"* ]]
 }
 
 @test "homepage_service_yaml: attaches gatus widget only for gatus service" {
@@ -183,6 +201,42 @@ load test_helper
   rm -f "$gen"
 }
 
+# Regression for the duplicate-category bug: a newly-discovered service whose
+# group already exists (e.g. checkmk -> other) must be spliced INSIDE that
+# existing group block, producing a single group header — not a repeated one.
+@test "merge_homepage_yaml: new service goes inside existing group (no dup header)" {
+  local gen exist
+  gen=$(mktemp); exist=$(mktemp)
+  # Generated now discovers checkmk in the "other" group (already deployed).
+  printf '%s\n' \
+    '- other:' \
+    '    - omnitools:' \
+    '        href: http://omnitools.local' \
+    '    - checkmk:' \
+    '        href: http://checkmk.local' \
+    '    - convertx:' \
+    '        href: http://convertx.local' > "$gen"
+  printf '%s\n' \
+    '- other:' \
+    '    - omnitools:' \
+    '        href: http://omnitools.local' \
+    '    - convertx:' \
+    '        href: http://convertx.local' \
+    '' \
+    '- auth:' \
+    '    - authentik:' \
+    '        href: http://authentik.local:9000' > "$exist"
+  run merge_homepage_yaml "$gen" "$exist"
+  [[ "$status" -eq 0 ]]
+  # checkmk added INSIDE the existing other block.
+  [[ "$output" == *"    - checkmk:"* ]]
+  # only ONE "- other:" header (no duplicate category)
+  [[ "$output" != *"- other:"*"- other:"* ]]
+  # existing manual edit (authentik) preserved
+  [[ "$output" == *"http://authentik.local:9000"* ]]
+  rm -f "$gen" "$exist"
+}
+
 # --- merge_gatus_yaml (only add new) ---
 
 @test "merge_gatus_yaml: keeps existing verbatim, adds only new endpoint" {
@@ -223,6 +277,52 @@ load test_helper
   run merge_gatus_yaml "$gen" "$exist"
   [[ ${#output} -gt 0 ]]
   [[ "$output" != *"- name: jellyfin"*"- name: jellyfin"* ]]
+  rm -f "$gen" "$exist"
+}
+
+@test "merge_gatus_yaml: refreshes url of already-deployed endpoint (cron IP change)" {
+  local gen exist
+  gen=$(mktemp); exist=$(mktemp)
+  # Generated: jellyfin now on a new IP.
+  printf '%s\n' \
+    'metrics: true' \
+    'endpoints:' \
+    '  - name: jellyfin' \
+    '    group: media' \
+    '    url: http://192.168.1.99:8096' > "$gen"
+  # Deployed: jellyfin on an old IP, plus a manual myprobe block.
+  printf '%s\n' \
+    'metrics: true' \
+    'endpoints:' \
+    '  - name: jellyfin' \
+    '    group: media' \
+    '    url: http://192.168.1.210:8096' \
+    '    conditions:' \
+    '      - "[CONNECTED] == true"' \
+    '  - name: myprobe' \
+    '    url: https://example.com/healthz' > "$exist"
+  run merge_gatus_yaml "$gen" "$exist"
+  [[ "$status" -eq 0 ]]
+  # jellyfin url refreshed to the fresh scan IP.
+  [[ "$output" == *"url: http://192.168.1.99:8096"* ]]
+  # old deployed url gone for jellyfin.
+  [[ "$output" != *"url: http://192.168.1.210:8096"* ]]
+  # manual fields (conditions) preserved, and manual myprobe block untouched.
+  [[ "$output" == *'"[CONNECTED] == true"'* ]]
+  [[ "$output" == *"url: https://example.com/healthz"* ]]
+  # jellyfin appears once (no duplicate from new-block splice).
+  [[ "$output" != *"- name: jellyfin"*"- name: jellyfin"* ]]
+  rm -f "$gen" "$exist"
+}
+
+@test "merge_gatus_yaml: unchanged IP keeps file byte-identical (no churn)" {
+  local gen exist
+  gen=$(mktemp); exist=$(mktemp)
+  printf '%s\n' 'metrics: true' 'endpoints:' '  - name: jellyfin' '    url: http://192.168.1.210:8096' > "$gen"
+  printf '%s\n' 'metrics: true' 'endpoints:' '  - name: jellyfin' '    url: http://192.168.1.210:8096' > "$exist"
+  run merge_gatus_yaml "$gen" "$exist"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "$(cat "$exist")" ]]
   rm -f "$gen" "$exist"
 }
 

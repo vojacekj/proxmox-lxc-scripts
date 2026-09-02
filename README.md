@@ -80,13 +80,13 @@ Config is loaded from `/root/scripts/` (the script's directory) first, then from
 | App | LXC install script | Role | Config path | Port |
 |-----|--------------------|------|-------------|------|
 | [Gatus](https://github.com/TwiN/gatus) | `ct/gatus.sh` | Probes services (HTTP/TCP), uptime history, alerting | `/opt/gatus/config` | 8080 |
-| [Homepage](https://gethomepage.dev) | `ct/homepage.sh` | Start page: icons + links + Gatus uptime widget on the Gatus card | `/opt/homepage/config` | 3000 |
+| [Homepage](https://gethomepage.dev) | `ct/homepage.sh` | Start page: icons + links + a `siteMonitor` status widget on every service card | `/opt/homepage/config` | 3000 |
 
 Flow:
 
 1. `dashboard-discover.sh` scans running LXCs, detects web services and ports (built-in map → community-scripts GitHub → port scan).
-2. It renders **Gatus endpoint config** (one service = one HTTP/TCP check, grouped, with alerting) and a **Homepage `services.yaml`** (icons + links, plus a single Gatus uptime widget on the `gatus` card — the widget shows Gatus-wide aggregate stats, so it's not repeated per service).
-3. Files are pushed into each LXC via `pct push`. Before overwriting, the script **merges** each generated file with the currently deployed one: anything already in the live file is left completely untouched (including manual edits like a custom proxmox href) and only services/endpoints this run discovered but that aren't deployed yet are added — "only add new", like the old Flame tool. Unchanged files stay byte-identical, so Homepage/Gatus don't reload on every cron run.
+2. It renders **Gatus endpoint config** (one service = one HTTP/TCP check, grouped, with alerting) and a **Homepage `services.yaml`** (icons + links + a `siteMonitor` on every card). The container the script runs in also keeps the Gatus LXC `/etc/hosts` in sync so `*.local` resolves for Gatus.
+3. Files are pushed into each LXC via `pct push`. Before overwriting, the script **merges** each generated file with the currently deployed one: anything already in the live file is left completely untouched (including manual edits like a custom proxmox href) and only services/endpoints this run discovered but that aren't deployed yet are added — "only add new", like the old Flame tool. The one field that is refreshed for already-deployed endpoints is Gatus's volatile `url:` (kept current to the fresh scan). Unchanged files stay byte-identical, so Homepage/Gatus don't reload on every cron run.
 4. **Both apps hot-reload**: Gatus re-reads its config every ~30s; Homepage watches `services.yaml` and updates immediately. No restarts needed.
 
 Using two file-driven apps means everything is fully scriptable — no manual monitor creation.
@@ -127,7 +127,9 @@ chmod 600 dashboard-discover.conf
 - Matches services against a built-in map of 80+ common homelab apps
 - Falls back to port scanning if the service isn't in the map
 - Renders Gatus endpoints (HTTP/TCP checks, grouped by category, with alerting)
-- Renders Homepage `services.yaml` (icons, links, single Gatus uptime widget on the `gatus` card)
+- Renders Homepage `services.yaml` (icons, links, and a `siteMonitor` status widget on **every** service card)
+- Keeps Gatus raw-IP `url:` current on every run, and (with `USE_LOCAL_DOMAINS=yes`) rewrites the Gatus LXC `/etc/hosts` so `*.local` resolves inside Gatus
+- Optionally mirrors discovered services into Uptime Kuma as monitors by editing its SQLite DB directly (`KUMA_ENABLED=yes`)
 - Pushes config into each LXC via `pct push`
 - Sends a notification summary via Telegram/Gotify
 
@@ -152,6 +154,12 @@ Both Gatus and Homepage reload config automatically — no service restarts requ
 | `GATUS_ALERTING` | `yes` to emit alerting blocks from `telegram.conf`/`gotify.conf` |
 | `GATUS_RESTART_SERVICE` | `yes` to restart Gatus after pushing (default `no` — avoids restart churn) |
 | `GATUS_PORT` | Gatus listen port (default `8080`), appended to the Homepage widget URL |
+| `KUMA_ENABLED` | Set to `yes` to mirror discovered services into Uptime Kuma (default `no`) |
+| `KUMA_LXC_ID` | Auto-detected by name `kuma` on first run, or set manually |
+| `KUMA_DB_PATH` | Kuma SQLite DB path inside its LXC (default `/opt/uptime-kuma/data/kuma.db`) |
+| `KUMA_PORT` | Kuma web port for LXC auto-detect fallback (default `3001`) |
+| `KUMA_INTERVAL` | Monitor check interval in seconds (default `60`) |
+| `KUMA_RESTART_SERVICE` | `yes` to restart `uptime-kuma` after writing the DB (default `yes` — needed to reload monitors) |
 | `HOMEPAGE_ENABLED` | Set to `no` to skip Homepage config generation |
 | `HOMEPAGE_LXC_ID` | Auto-detected on first run, or set manually |
 | `HOMEPAGE_CONFIG_DIR` | Config dir inside Homepage LXC (default `/opt/homepage/config`) |
@@ -205,6 +213,14 @@ pct exec $VMID -- bash -c "
 If the systemd unit already loads `/opt/homepage/.env` via `EnvironmentFile`, append the same value there instead of using `sed`. `localhost:3000` and `127.0.0.1:3000` are always allowed by default.
 
 **Built-in services:** jellyfin, plex, sonarr, radarr, prowlarr, qbittorrent, portainer, grafana, prometheus, pihole, adguard, nextcloud, vaultwarden, paperless, immich, and 60+ more.
+
+**Homepage `siteMonitor` status widgets:** every rendered service card gets a `siteMonitor:` targeting the same `protocol://<link_host>[:port]` as its link. Homepage then attaches a status widget to each card. `siteMonitor` is probed server-side from the Homepage LXC, so it only works with `.local` if that LXC has mDNS. Pick the widget style per service (in `services.yaml`) or globally (in `settings.yaml`): unset = response ms + status, `"dot"` or `"basic"` for a minimal UP/DOWN indicator. (`statusStyle` is a Homepage-side setting you choose; the script does not emit it.)
+
+**Uptime Kuma mirror (trial):** Uptime Kuma has no REST API to create monitors (only a private Socket.IO interface), so this script writes `monitor` rows straight into Kuma's SQLite DB from inside the Kuma LXC:
+- Set `KUMA_ENABLED=yes`, ensure `sqlite3` is installed in the Kuma LXC, and point `KUMA_DB_PATH` at the actual DB location for your install.
+- It backs the DB up (`-backup.db`) before writing, only touches the `monitor` table, and is idempotent: existing monitor names are refreshed (url + `ignore_tls=1` for HTTPS), new ones are inserted, everything else untouched.
+- Kuma loads monitors into memory at startup, so it must be restarted after the write (`KUMA_RESTART_SERVICE=yes`, default) to pick up changes.
+- This is upstream "not recommended" and depends on the exact Kuma DB schema, which can drift between versions. Any sqlite3 failure is logged and skipped — Gatus continues to work regardless.
 
 **Example Gatus output:**
 
