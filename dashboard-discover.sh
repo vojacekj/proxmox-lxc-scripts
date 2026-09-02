@@ -873,7 +873,7 @@ merge_homepage_yaml() {
 
   # Empty new list: the deployed file already has everything. Output verbatim.
   if [[ ! -s "$new_file" ]]; then
-    inject_homepage_sitemonitor "$gen" "$base"
+    inject_homepage_sitemonitor "$base"
     rm -f "$new_file" "$cleaned_file" 2>/dev/null
     return 0
   fi
@@ -938,74 +938,69 @@ merge_homepage_yaml() {
       }
     }
   ' "$base" > "$spliced_file"
-  inject_homepage_sitemonitor "$gen" "$spliced_file"
+  inject_homepage_sitemonitor "$spliced_file"
   rm -f "$new_file" "$spliced_file" "$cleaned_file"
 }
 
-# Add a `siteMonitor:` line to any Homepage service block that lacks it.
-# Args: generated_file merged_file  (merged = a Homepage services.yaml)
-# Builds a name->siteMonitor map from the freshly generated file, then walks the
-# merged file (which may be the untouched live config or the spliced output) and
-# inserts `        siteMonitor: <value>` into every service block that doesn't
-# already have one, right after its `description:` line. Existing siteMonitor
-# lines (and every other manual edit: href/icon/widget/description) are left
-# untouched. This is what back-fills the new field onto services that were
-# deployed in earlier runs of the "only add new" merge.
+# Ensure every managed Homepage service block's `siteMonitor:` mirrors its own
+# `href:` (the two are expected to match: same protocol://host[:port]).
+# Args: merged_file  (a Homepage services.yaml, live config or spliced output)
+# For each block it back-fills a missing siteMonitor (right after `description:`),
+# and corrects a *stale* siteMonitor that no longer matches the block's href
+# (e.g. an old `siteMonitor: https://proxmox.local:8006` whose href is now
+# `https://pve01.local:8006`). Manual edits (href/icon/description/widget) are
+# never touched; siteMonitor simply follows the href. This is what back-fills the
+# field onto services deployed in earlier runs of the "only add new" merge and
+# keeps the badge in sync with the link the browser reaches.
 inject_homepage_sitemonitor() {
-  local gen="$1"
-  local merged="$2"
+  local merged="$1"
 
-  # Build name -> siteMonitor from the generated file.
-  local map_file="${TMPDIR:-/tmp}/home-site.$$"
-  GEN="$gen" awk '
-    /^    - [^:]+:/ {
-      name = $2; sub(/:$/, "", name)
-      cur = name
+  # Walk the merged file and make every managed service block's `siteMonitor:`
+  # mirror its own `href:` (the two are expected to match: same protocol://host
+  # [:port]). This both back-fills the field onto services that predate it and
+  # corrects a stale value (e.g. an old `proxmox.local` that no longer matches a
+  # href of `pve01.local`) without ever touching the manual href/icon/description.
+  # Manual href edits are preserved; siteMonitor simply follows the href.
+  #
+  # Each block is buffered; if it has an href but no siteMonitor by the time the
+  # next block (or EOF) starts, we append `siteMonitor: <href>` at the block's
+  # end. Ordering of properties doesn't matter to Homepage, and deferring avoids
+  # double-adding when a siteMonitor already exists later in the same block.
+  awk '
+    {
+      if (/^    - [^:]+:/) {
+        flush()
+        name = $2; sub(/:$/, "", name)
+        href = ""; have_site = 0
+        buf = $0 "\n"
+        next
+      }
+      if (/^        href: /) {
+        if (href == "") href = substr($0, index($0, ": ") + 2)
+        buf = buf $0 "\n"
+        next
+      }
+      if (/^        siteMonitor: /) {
+        have_site = 1
+        # rewrite stale values to match the block href (not "" = unterminated)
+        if (href == "") { buf = buf $0 "\n" }
+        else { buf = buf "        siteMonitor: " href "\n" }
+        next
+      }
+      buf = buf $0 "\n"
       next
     }
-    /^        siteMonitor: / {
-      if (cur != "") { site[cur] = substr($0, index($0, ": ") + 2) }
-    }
-    END { for (n in site) print n "\t" site[n] }
-  ' "$gen" > "$map_file"
-
-  # Walk the merged file and inject where missing.
-  MAP_FILE="$map_file" awk '
-    function load_map() {
-      if (loaded) return
-      loaded = 1
-      while ((getline kv < ENVIRON["MAP_FILE"]) > 0) {
-        split(kv, p, "\t")
-        site[p[1]] = p[2]
+    function flush() {
+      if (href != "" && !have_site) {
+        gsub(/[ \t]+$/, "", buf)
+        print buf "\n        siteMonitor: " href
+      } else {
+        printf "%s", buf
       }
-      close(ENVIRON["MAP_FILE"])
+      buf = ""
     }
-    {
-      load_map()
-      if (/^    - [^:]+:/) {
-        name = $2; sub(/:$/, "", name)
-        block = name
-        emitted = 0
-        has_site = 0
-        print
-        next
-      } else if (/^        siteMonitor: /) {
-        if (emitted) { next }   # already injected above description; drop the duplicate
-        print
-        has_site = 1
-        next
-      } else if (/^        description: /) {
-        print
-        if (block != "" && !has_site && !emitted && (block in site)) {
-          print "        siteMonitor: " site[block]
-          emitted = 1
-        }
-        next
-      }
-      print
-    }
+    END { flush() }
   ' "$merged"
-  rm -f "$map_file"
 }
 
 # --- GATUS MERGE (add new; refresh IPs of known) ---

@@ -240,59 +240,54 @@ load test_helper
 # --- inject_homepage_sitemonitor ---
 
 @test "inject_homepage_sitemonitor: adds siteMonitor to deployed block missing it" {
-  local gen exist
-  gen=$(mktemp); exist=$(mktemp)
-  printf '%s\n' \
-    '- other:' \
-    '    - omnitools:' \
-    '        href: http://omnitools.local' \
-    '        icon: https://x/logo.png' \
-    '        description: Discovered from Proxmox LXC' \
-    '        siteMonitor: http://omnitools.local' > "$gen"
+  local exist
+  exist=$(mktemp)
   printf '%s\n' \
     '- other:' \
     '    - omnitools:' \
     '        href: http://omnitools.local' \
     '        icon: https://x/logo.png' \
     '        description: Discovered from Proxmox LXC' > "$exist"
-  run inject_homepage_sitemonitor "$gen" "$exist"
+  run inject_homepage_sitemonitor "$exist"
   [[ "$status" -eq 0 ]]
   [[ "$output" == *"siteMonitor: http://omnitools.local"* ]]
-  rm -f "$gen" "$exist"
+  rm -f "$exist"
 }
 
-@test "inject_homepage_sitemonitor: preserves manual href, uses generated siteMonitor" {
-  local gen exist
-  gen=$(mktemp); exist=$(mktemp)
-  printf '%s\n' \
-    '- other:' \
-    '    - proxmox:' \
-    '        href: https://pve01.local:8006' \
-    '        icon: https://y.svg' \
-    '        description: Discovered from Proxmox LXC' \
-    '        siteMonitor: https://pve01.local:8006' > "$gen"
+@test "inject_homepage_sitemonitor: siteMonitor mirrors manual href, preserves other edits" {
+  local exist
+  exist=$(mktemp)
   printf '%s\n' \
     '- other:' \
     '    - proxmox:' \
     '        href: https://manual-pve:8006' \
     '        icon: https://y.svg' \
     '        description: Discovered from Proxmox LXC' > "$exist"
-  run inject_homepage_sitemonitor "$gen" "$exist"
+  run inject_homepage_sitemonitor "$exist"
   [[ "$output" == *"href: https://manual-pve:8006"* ]]
+  [[ "$output" == *"siteMonitor: https://manual-pve:8006"* ]]
+  rm -f "$exist"
+}
+
+@test "inject_homepage_sitemonitor: refreshes stale siteMonitor to match href" {
+  local exist
+  exist=$(mktemp)
+  printf '%s\n' \
+    '- other:' \
+    '    - proxmox:' \
+    '        href: https://pve01.local:8006' \
+    '        icon: https://y.svg' \
+    '        description: Discovered from Proxmox LXC' \
+    '        siteMonitor: https://proxmox.local:8006' > "$exist"
+  run inject_homepage_sitemonitor "$exist"
   [[ "$output" == *"siteMonitor: https://pve01.local:8006"* ]]
-  rm -f "$gen" "$exist"
+  [[ "$(echo "$output" | grep -c 'siteMonitor:')" -eq 1 ]]
+  rm -f "$exist"
 }
 
 @test "inject_homepage_sitemonitor: does not duplicate existing siteMonitor" {
-  local gen exist
-  gen=$(mktemp); exist=$(mktemp)
-  printf '%s\n' \
-    '- other:' \
-    '    - omnitools:' \
-    '        href: http://omnitools.local' \
-    '        icon: https://x/logo.png' \
-    '        description: Discovered from Proxmox LXC' \
-    '        siteMonitor: http://omnitools.local' > "$gen"
+  local exist
+  exist=$(mktemp)
   printf '%s\n' \
     '- other:' \
     '    - omnitools:' \
@@ -300,9 +295,9 @@ load test_helper
     '        icon: https://x/logo.png' \
     '        description: Discovered from Proxmox LXC' \
     '        siteMonitor: http://omnitools.local' > "$exist"
-  run inject_homepage_sitemonitor "$gen" "$exist"
+  run inject_homepage_sitemonitor "$exist"
   [[ "$(echo "$output" | grep -c 'siteMonitor:')" -eq 1 ]]
-  rm -f "$gen" "$exist"
+  rm -f "$exist"
 }
 
 @test "merge_homepage_yaml: idempotent siteMonitor back-fill (no dup on rerun)" {

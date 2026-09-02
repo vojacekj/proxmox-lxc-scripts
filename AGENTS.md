@@ -131,7 +131,7 @@ Manual checks (require a live Proxmox host):
 #### Test architecture
 
 - `tests/` uses [bats-core](https://github.com/bats-core/bats-core), one file per module
-- `tests/test_helper.bash` generates a "testable extract" of `dashboard-discover.sh`: it pulls in the global defaults, the `SERVICE_MAP` array, `CATEGORY_MAP`, and the pure functions (`normalize_url`, `lookup_service`, `get_icon_url`, `get_port_override`, `get_service_group`, `homepage_icon`, `gatus_config_header`, `gatus_endpoint_yaml`, `homepage_service_yaml`, `merge_homepage_yaml`, `inject_homepage_sitemonitor`, `homepage_has_dup_groups`, `dedup_homepage_groups`, `merge_gatus_yaml`, `extract_endpoint_urls`, `kuma_monitor_sql`, `kuma_status_group_sql`, `kuma_link_sql`, `parse_args`)
+- `tests/test_helper.bash` generates a "testable extract" of `dashboard-discover.sh`: it pulls in the global defaults, the `SERVICE_MAP` array, `CATEGORY_MAP`, and the pure functions (`normalize_url`, `lookup_service`, `get_icon_url`, `get_port_override`, `get_service_group`, `homepage_icon`, `gatus_config_header`, `gatus_endpoint_yaml`, `homepage_service_yaml`, `merge_homepage_yaml`, `inject_homepage_sitemonitor`, `homepage_has_dup_groups`, `dedup_homepage_groups`, `merge_gatus_yaml`, `extract_endpoint_urls`, `kuma_monitor_url`, `kuma_monitor_sql`, `kuma_status_group_sql`, `kuma_link_sql`, `parse_args`)
 - **`declare -A` associative arrays don't propagate into the subshells bats `run` uses** — the helper rewrites the map with `declare -gxA` (bash 5.1+) so it's exported and visible
 - bash 3.2 (macOS default) can't run the tests; use Homebrew bash (`brew install bash`, then `make test` auto-detects it). CI (Ubuntu) has bash 5.x
 - Tests run without Proxmox or any LXC — all functions tested are pure logic
