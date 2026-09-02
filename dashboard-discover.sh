@@ -1272,9 +1272,17 @@ write_kuma_monitors() {
     log WARN "  KUMA: no LXC/DB path configured; skipping Kuma sync."
     return 0
   fi
-  if ! pct exec "$vmid" -- command -v sqlite3 >/dev/null 2>&1; then
-    log WARN "  KUMA: sqlite3 not installed in LXC ${vmid}; skipping Kuma sync."
-    return 0
+
+  # Auto-install sqlite3 in the LXC if missing (same approach as the old Flame
+  # script's ensure_sqlite3_in_lxc), so a stock Kuma LXC works without manual
+  # prep. Only the running status of the install is guarded — Gatus still works.
+  if ! pct exec "$vmid" -- sh -c "command -v sqlite3 || which sqlite3 || test -x /usr/bin/sqlite3" &>/dev/null; then
+    log INFO "  KUMA: sqlite3 not found in LXC ${vmid}, installing..."
+    if ! pct exec "$vmid" -- bash -c "apt-get update -qq && apt-get install -y -qq sqlite3" &>/dev/null; then
+      log WARN "  KUMA: failed to install sqlite3 in LXC ${vmid}; skipping Kuma sync."
+      return 0
+    fi
+    log INFO "  KUMA: sqlite3 installed in LXC ${vmid}."
   fi
 
   # Backup the DB before any write.
