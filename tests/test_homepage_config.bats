@@ -138,6 +138,18 @@ load test_helper
   [ -z "$output" ]
 }
 
+@test "get_service_group: flame maps to dashboards" {
+  run get_service_group "flame"
+  [[ "$output" == "dashboards" ]]
+}
+
+# --- lookup_service ---
+
+@test "lookup_service: flame resolves port 5005" {
+  run lookup_service "flame"
+  [[ "$output" == *":5005" ]]
+}
+
 # --- merge_homepage_yaml (only add new) ---
 
 @test "merge_homepage_yaml: keeps existing verbatim, adds only new service" {

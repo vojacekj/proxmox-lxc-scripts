@@ -313,6 +313,7 @@ declare -A SERVICE_MAP=(
 
   # Dashboards
   ["dashy"]="dashy:4000"
+  ["flame"]="flame:5005"
   ["heimdall"]="heimdall:80"
   ["homarr"]="homarr:7575"
   ["homepage"]="homepage:3000"
@@ -356,7 +357,7 @@ CATEGORY_MAP="media:jellyfin,plex,tautulli,overseerr,jellyseerr,emby,audiobooksh
 |auth:vaultwarden,bitwarden,authentik,authelia\
 |communication:matrix,gotify,ntfy,gotosocial,lemmy,friendica,discourse,ghost\
 |documents:bookstack,wikijs,dokuwiki,outline,mealie,karakeep,hedgedoc,drawio\
-|dashboards:dashy,heimdall,homarr,homepage\
+|dashboards:dashy,heimdall,homarr,homepage,flame\
 |analytics:plausible,matomo,umami\
 |databases:adminer,phpmyadmin,cloudbeaver\
 |other:changedetection,cdio,actualbudget,actual,duplicati,freshrss,filerun,grocy,firefly,firefly-iii,librespeed"
